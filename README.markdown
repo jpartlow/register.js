@@ -9,7 +9,7 @@ Dependencies
 ------------
 
  * [Prototype](http://prototypejs.org) v1.6.0.3
- * CreditCardTrackParser v0.1.0
+ * [credit_card_track_parser](https://github.com/jpartlow/credit_card_track_parser) v0.1.0
 
 Both can be found in /lib.
 
