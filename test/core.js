@@ -1,3 +1,5 @@
+Register.debug = true
+
 module("register-construction")
 
 test("construct", function() {
@@ -21,6 +23,18 @@ test("initialize_array_of", function() {
   expect(1)
   var core = new Register.Core()
   deepEqual(core.initialize_array_of(Register.Code, [ {}, {} ]), [ new Register.Code(), new Register.Code() ])
+})
+
+test("initialize_array_of-lookup", function() {
+  expect(3)
+  var core = new Register.Core()
+  var A = function (object) { for (var p in object) { this[p] = object[p] } }
+  var config1 = { id: 10, prop: 'foo' }
+  var config2 = { id: 20, prop: 'bar'} 
+  var array = core.initialize_array_of(A, [ config1, config2 ]) 
+  deepEqual(array, [ new A(config1), new A(config2) ])
+  strictEqual(array.lookup(10), array[0]) 
+  strictEqual(array.lookup(20), array[1]) 
 })
 
 test("inherits", function() {
@@ -49,15 +63,30 @@ test("gold-data", function() {
 
 module("register-util")
 test("locate", function() {
-  expect(6)
+  expect(16)
   var rc = new Register.Core()
   equal(rc.locate('register'), $('register'), 'handles id string')
-  var div = new Element('div').update('<div id="foo">Foo</div>')
-  equal(div.down('#foo'), rc.locate('foo', div), 'finds by id string within a context')
+  equal(rc.locate('.remove-row-control'), $$('.remove-row-control').first(), 'handles selector')
+
+  var div = new Element('div').update('<div id="foo">Foo</div><div class="bar">Bar</div>')
+  var foo = div.down('#foo')
+  var bar = div.down('.bar')
+  equal(foo, rc.locate('foo', div), 'finds by id string within a context')
+  equal(bar, rc.locate('.bar', div), 'finds by selector string within a context')
   raises(function() { rc.locate('does-not-exist', div) }, Register.Exceptions.MissingElementException, 'should raise MissingElementException if id does not exist in element descendents')
+  raises(function() { rc.locate('.does-not-exist', div) }, Register.Exceptions.MissingElementException, 'should raise MissingElementException if selector does not match anything in element descendents')
   raises(function() { rc.locate('does-not-exist') }, Register.Exceptions.MissingElementException, 'should raise MissingElementException if id does not exist in document')
   is_undefined(rc.locate('does-not-exist', div, false), 'should not raise if does not exist in element descendants and loudly is set false')
+  is_undefined(rc.locate('.does-not-exist', div, false), 'should not raise if selector does not match in element descendants and loudly is set false')
   is_undefined(rc.locate('does-not-exist', null, false), 'should not raise if id does not exist in document and loudly is set false')
+
+  rc.root = div
+  equal(foo, rc.locate('foo'), 'finds by id string within a context')
+  equal(bar, rc.locate('.bar'), 'finds by selector string within a context')
+  raises(function() { rc.locate('does-not-exist') }, Register.Exceptions.MissingElementException, 'should raise MissingElementException if id does not exist in context')
+  raises(function() { rc.locate('.does-not-exist') }, Register.Exceptions.MissingElementException, 'should raise MissingElementException if selector does not match in context')
+  is_undefined(rc.locate('does-not-exist', null, false), 'should not raise if id does not exist in context and loudly is set false')
+  is_undefined(rc.locate('.does-not-exist', null, false), 'should not raise if selector does not match in context and loudly is set false')
 })
 
 test("is_null_or_undefined", function() {
@@ -71,6 +100,46 @@ test("is_null_or_undefined", function() {
   ok(!Object.is_null_or_undefined(''), 'does not catch empty string')
 })
 
+test("equal_elements", function() {
+  expect(16)
+  var expected = new Element('option', { value: 1 }).update('Foo')
+  var same = new Element('option', { value: 1 }).update('Foo')
+  equal_element(expected, same)
+  equal_element(expected, same, true)
+  equal_elements([expected], [same])
+  equal_elements([expected], [same], true)
+})
+
+test("send", function() {
+  expect(6)
+  var o = {
+    a: 'property',
+    2: 'property two',
+    foo: function() { return 'fired foo' },
+  }
+  equal(Object.__send(o, 'a'), 'property')
+  equal(Object.__send(o, 2), 'property two')
+  equal(Object.__send(o, 'foo'), 'fired foo')
+  var a = 'a'
+  var two = 2
+  var foo = 'foo'
+  equal(Object.__send(o, a), 'property')
+  equal(Object.__send(o, two), 'property two')
+  equal(Object.__send(o, foo), 'fired foo')
+})
+
+module("register-code", {
+  setup: function() {
+    this.gold = new GoldData()
+  }
+})
+test("init-code", function() {
+  var code_data = this.gold.purchase_codes[0]
+  var code = new Register.Code(code_data)
+  strictEqual(code.id, code_data.id)
+  strictEqual(code.label, code_data.label)
+})
+
 module("register-new-payment", {
   setup: function() {
     this.gold = new GoldData()
@@ -80,6 +149,120 @@ module("register-new-payment", {
 test("initialize", function() {
   expect(1)
   is_instance_of(this.register, Register.Instance)
+})
+
+test("register-ledger-row-initialize", function() {
+  expect(11)
+  var pc = this.gold.purchase_codes[0]
+  var lr = new Register.LedgerRow({
+    code_type: 'purchase',
+    code: pc,
+    credit: '10',
+  })
+  is_instance_of(lr, Register.LedgerRow)
+  // accessors
+  strictEqual(lr.get_credit(), 10)
+  is_undefined(lr.get_debit())
+  strictEqual(lr.get_amount(), 10)
+  equal(lr.get_label(), pc.label)
+  is_undefined(lr.get_detail())
+  // other properties
+  equal(lr.type, pc.account_type)
+  equal(lr.account_number, pc.account_number)
+  equal(lr.account_name, pc.account_name)
+  equal(lr.register_code, pc.code)
+  equal(lr.code_type, 'purchase')
+})
+
+test("register-ledger-row-bad-initialization", function() {
+  expect(4)
+  var pc = this.gold.purchase_codes[0]
+  var config = $H({
+    code_type: 'purchase',
+    code: pc,
+    credit: '10',
+  })
+  raises(
+    function() {
+      new Register.LedgerRow(config.merge({code_type: 'foo'}).toObject())
+    },
+    Register.Exceptions.LedgerRowException,
+    'bad code type'
+  )
+  raises(
+    function() {
+      new Register.LedgerRow(config.merge({debit: 10}).toObject())
+    },
+    Register.Exceptions.LedgerRowException,
+    'both debit and credit set'
+  )
+  raises(
+    function() {
+      new Register.LedgerRow(config.merge({credit: '0'}).toObject())
+    },
+    Register.Exceptions.LedgerRowException,
+    'zero amount'
+  )
+  raises(
+    function() {
+      new Register.LedgerRow(config.merge({credit: undefined}).toObject())
+    },
+    Register.Exceptions.LedgerRowException,
+    'undefined amount'
+  )
+})
+
+test("register-ledger-row-initialize-from-existing", function() {
+  expect(11)
+  var ldata1 = this.gold.ledger[1]
+  var lr = new Register.LedgerRow(ldata1)
+  is_instance_of(lr, Register.LedgerRow)
+  // accessors
+  strictEqual(lr.get_debit(), parseFloat(ldata1.debit))
+  is_undefined(lr.get_credit())
+  strictEqual(lr.get_amount(), parseFloat(ldata1.debit))
+  equal(lr.get_label(), ldata1.code_label)
+  is_undefined(lr.get_detail())
+  // other properties
+  equal(lr.type, ldata1.type)
+  equal(lr.account_number, ldata1.account_number)
+  equal(lr.account_name, ldata1.account_name)
+  equal(lr.register_code, ldata1.register_code)
+  equal(lr.code_type, ldata1.code_type)
+})
+
+test("register-ledger-row-set-amount", function() {
+  expect(12)
+  var pc = this.gold.purchase_codes[0]
+  var config = {
+    code_type: 'purchase',
+    code: pc,
+    credit: '10',
+  }
+  var lr = new Register.LedgerRow(config)
+  strictEqual(lr.get_credit(), 10.0)
+  is_undefined(lr.get_debit())
+  strictEqual(lr.get_amount(), 10.0)
+  lr.set_credit('15')
+  strictEqual(lr.get_credit(), 15.0)
+  is_undefined(lr.get_debit())
+  strictEqual(lr.get_amount(), 15.0)
+  lr.set_debit('6')
+  is_undefined(lr.get_credit())
+  strictEqual(lr.get_debit(), 6.0)
+  strictEqual(lr.get_amount(), -6.0)
+  lr.set_debit('-15.5')
+  strictEqual(lr.get_credit(), 15.5)
+  is_undefined(lr.get_debit())
+  strictEqual(lr.get_amount(), 15.5)
+})
+
+test("register-ledger-add", function() {
+  expect(1)
+  var ledger = this.register.ledger
+  var original_count = ledger.count() 
+  ledger.add('purchase', '1','40')
+  equal(ledger.count(), original_count + 1)
 })
 
 test("register-ui-initialization", function() {
@@ -97,6 +280,86 @@ test("register-ui-initialization", function() {
   ok(ui.register_template.innerHTML != 'foo')
 })
 
-test("register-ui-purchase-code-select", function() {
+test("register-ui-delegation", function() {
+  expect(3)
+  var ui = this.register.ui
+  strictEqual(ui.purchase_codes, this.register.purchase_codes)
+  strictEqual(ui.payment_codes, this.register.payment_codes)
+  strictEqual(ui.credit_codes, this.register.credit_codes)
+})
 
+test("register-ui-make-options", function() {
+  expect(17)
+  var ui = this.register.ui
+  var pc = this.gold.purchase_codes
+  var ex =  [ 
+    new Element('option', { value: pc[0].id }).update(pc[0].label),
+    new Element('option', { value: pc[1].id }).update(pc[1].label),
+  ]
+  var options = ui.make_options(ui.purchase_codes, 'id', 'label')
+  equal_elements(options, ex)
+  var options = ui.make_options(ui.purchase_codes, 'id', 'label', { value: 'default', label: 'Default' })
+  ex.unshift(new Element('option', { value: 'default'}).update('Default'))
+  equal_elements(options, ex)
+})
+
+test("register-ui-select-options", function() {
+  expect(2)
+  var ui = this.register.ui
+  var pc = this.gold.purchase_codes
+  var py = this.gold.payment_codes
+
+  var ac = ui.purchase_codes_select.childElements()
+  var message = "Expected " + pc.length + 1 + " options but found " + ac.inspect()
+  equal(ac.length, pc.length + 1, message)
+
+  var ac = ui.payment_codes_select.childElements()
+  var message = "Expected " + py.length + " options but found " + ac.inspect()
+  equal(ac.length, py.length, message)
+})
+
+test("register-ui-initialize-purchase-code", function() {
+  expect(5)
+  var ui = this.register.ui
+  var pc = ui.purchase_codes_select
+  var original_ui_row_count = ui.rows.length
+  var fired = false
+  ui.after_purchase_code_select = function() { fired = true } 
+  fireEvent(pc, 'change')
+  equal(fired, false)
+  ui.purchase_amount_input.value = '100'
+  fireEvent(pc, 'change')
+  equal(fired, false)
+  ui.purchase_codes_select.value = '1'
+  fireEvent(pc, 'change')
+  equal(fired, false)
+  ui.purchase_amount_input.value = '100'
+  ui.purchase_codes_select.value = '1'
+  fireEvent(pc, 'change')
+  equal(fired, true)
+  equal(ui.rows.length, original_ui_row_count + 1)
+})
+
+test("register-ui-add-ledger-row", function() {
+  expect(2)
+  var ui = this.register.ui
+  var ledger = this.register.ledger
+  var original_ledger_count = ledger.count() 
+  var original_ui_row_count = ui.rows.length
+  ui.add_ledger_row('1','40')
+  equal(ledger.count(), original_ledger_count + 1)
+  equal(ui.rows.length, original_ui_row_count + 1)
+})
+
+test("register-initialization", function() {
+  expect(2)
+  var ledger = this.register.ledger
+  deepEqual(ledger.config, {})
+  deepEqual(ledger.rows, [])
+})
+
+test("register-ledger-count", function() {
+  expect(1)
+  var ledger = this.register.ledger
+  equal(ledger.count(), 0)
 })

@@ -27,10 +27,10 @@
               <div id="ledger" class="column">
                 <div id="ledger-entry-input-controls">
                   <div class="column dont-show-dirty">
-                    <strong>$</strong> <input id="amount-input" type="text" size="6" tabindex="1" />
+                    <strong>$</strong> <input id="purchase-amount" type="text" size="6" tabindex="1" />
                   </div>
                   <div class="column dont-show-dirty">
-                    <select id="account-code" tabindex="2"></select>
+                    <select id="purchase-code" tabindex="2"></select>
                   </div>
                 </div>
           
@@ -40,7 +40,6 @@
                 <div id="ledger-entries" class="alternating_list">
                    <div class="headers colored">
                      <div class="column cell center label" title="Entry code">Code</div>
-                     <div class="column cell center type" title="Account type">T</div>
                      <div class="column cell center debit">Debit</div>
                      <div class="column cell center credit">Credit</div>
                      <div class="column cell center detail">Details</div>
@@ -48,16 +47,14 @@
         
                    <div id="ledger-entry-row-template" class="ledger-entry row">
                      <div class="column cell center label" ></div>
-                     <div class="column cell center type" ></div>
                      <div class="column cell debit" ></div>
                      <div class="column cell credit" ></div>
                      <div class="column cell detail" ></div>
                      <div class="column cell remove">
-                       <input type="button" name="remove_row" value="-" tabindex="-1" disabled="disabled" />
+                       <input class="remove-row-control" type="button" name="remove_row" value="-" tabindex="-1" disabled="disabled" />
                      </div>
+                     <hr/> <!-- css to clear columns -->
                    </div>
-        
-                   <hr/>
         
                 </div>
           
@@ -102,7 +99,7 @@
                   <dl class="inline">
                     <dt><label for="payment_type">Type</label></dt>
                     <dd>
-                      <select class="payment-type" id="payment_type" name="payment[type]" tabindex="3">
+                      <select class="payment-type" id="payment-type" name="payment[type]" tabindex="3">
                       </select>
                     </dd>
                   </dl>

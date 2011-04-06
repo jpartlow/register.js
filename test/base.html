@@ -6,4 +6,292 @@
   <body>
     <h1>Register Testing Environment</h1>
   </body>
+        <div id="register-template">
+          <div id="register">
+            <div class="title"></div>
+        
+            <form id="payment-form" target="#" method="post" class="alert-on-dirty"> 
+        
+              <div id="ledger" class="column">
+                <div id="ledger-entry-input-controls">
+                  <div class="column dont-show-dirty">
+                    <strong>$</strong> <input id="amount-input" type="text" size="6" tabindex="1" />
+                  </div>
+                  <div class="column dont-show-dirty">
+                    <select id="account-code" tabindex="2"></select>
+                  </div>
+                </div>
+          
+                <hr />
+                <hr class="subtle"/>
+          
+                <div id="ledger-entries" class="alternating_list">
+                   <div class="headers colored">
+                     <div class="column cell center label" title="Entry code">Code</div>
+                     <div class="column cell center type" title="Account type">T</div>
+                     <div class="column cell center debit">Debit</div>
+                     <div class="column cell center credit">Credit</div>
+                     <div class="column cell center detail">Details</div>
+                   </div>
+        
+                   <div id="ledger-entry-row-template" class="ledger-entry row">
+                     <div class="column cell center label" ></div>
+                     <div class="column cell center type" ></div>
+                     <div class="column cell debit" ></div>
+                     <div class="column cell credit" ></div>
+                     <div class="column cell detail" ></div>
+                     <div class="column cell remove">
+                       <input type="button" name="remove_row" value="-" tabindex="-1" disabled="disabled" />
+                     </div>
+                   </div>
+        
+                   <hr/>
+        
+                </div>
+          
+                <hr class="subtle"/>
+          
+                <div id="ledger-totals" class="alternating_list">
+                  <div class="headers colored">
+                    <div class="column cell label">Total</div>
+                    <div id="total-cost" class="column amount calculated" ></div>
+                  </div>
+          
+                  <hr />
+          
+                  <div class="headers colored">
+                    <div class="column cell label">Amount Tendered</div>
+                    <div class="column amount">
+                      <input id="amount-tendered" type="text" name="amount_tendered" value="0" />
+                    </div>
+                  </div>
+          
+                  <hr />
+        
+                  <div class="headers colored">
+                    <div class="column cell label">Amount Credited</div>
+                    <div id="amount-credited" class="column amount" ></div>
+                  </div>
+        
+                  <hr/>
+                  <hr class="subtle"/>
+          
+                  <div class="headers colored">
+                    <div class="column cell label">Change</div>
+                    <div id="change-due" class="column amount calculated" ></div>
+                  </div>
+                </div>
+          
+              </div>
+          
+              <div id="payment-fields" class="column">
+         
+                <div id="payment-controls"> 
+                  <dl class="inline">
+                    <dt><label for="payment_type">Type</label></dt>
+                    <dd>
+                      <select class="payment-type" id="payment_type" name="payment[type]" tabindex="3">
+                      </select>
+                    </dd>
+                  </dl>
+                </div>
+               
+                <div id="payment-type-fields">
+                  <dl class="inline show-by-type Check">
+                    <dt><label for="payment_check_name">Check name: </label></dt>
+                    <dd><input class="required" id="payment_check_name" name="payment[check_name]" size="20" tabindex="5" type="text" /></dd>
+                    <dt><label for="payment_check_phone">Check phone: </label></dt>
+                    <dd><input class="required" id="payment_check_phone" name="payment[check_phone]" size="20" tabindex="5" type="text" /></dd>
+                  </dl>
+                  <dl class="inline show-by-type GiftCertificate NonCashGiftCertificate">
+                    <dt><label for="payment_certificate_number">Certificate number: </label></dt>
+                    <dd><input class="required" id="payment_certificate_number" name="payment[certificate_number]" size="20" tabindex="5" type="text" /></dd>
+                  </dl>
+                  <dl class="inline show-by-type CreditVoucher">
+                    <dt><label for="payment_voucher_number">Voucher number: </label></dt>
+                    <dd><input class="required" id="payment_voucher_number" name="payment[voucher_number]" size="20" tabindex="5" type="text" /></dd>
+          
+                  </dl>
+                  <dl class="inline show-by-type Scholarship">
+                    <dt><label for="payment_scholarship_number">Scholarship number: </label></dt>
+                    <dd><input class="required" id="payment_scholarship_number" name="payment[scholarship_number]" size="20" tabindex="5" type="text" /></dd>
+                  </dl>
+                  <dl class="inline show-by-type CreditCard">
+                    <dt><label for="payment_credit_card_first_name">First name: </label></dt>
+                    <dd><input class="required" id="payment_credit_card_first_name" name="payment[credit_card][first_name]" size="20" tabindex="5" type="text" /></dd>
+                    <dt><label for="payment_credit_card_last_name">Last name: </label></dt>
+                    <dd><input class="required" id="payment_credit_card_last_name" name="payment[credit_card][last_name]" size="20" tabindex="5" type="text" /></dd>
+                    <dt><label for="payment_credit_card_number">Card number: </label></dt>
+                    <dd><input class="required" id="payment_credit_card_number" name="payment[credit_card][number]" size="20" tabindex="5" type="text" /></dd>
+                    <dt><label for="payment_credit_card_verification_value">CVV: </label></dt>
+          
+                    <dd><input class="required" id="payment_credit_card_verification_value" name="payment[credit_card][verification_value]" size="20" tabindex="5" type="text" /></dd>
+                    <dt>Expiration</dt>
+                    <dd>
+                      <select class="required" id="payment_credit_card_month" name="payment[credit_card][month]" tabindex="5">
+                        <option value="01">01</option>
+                        <option value="02">02</option>
+                        <option value="03">03</option>
+                        <option value="04">04</option>
+                        <option value="05">05</option>
+                        <option value="06">06</option>
+                        <option value="07">07</option>
+                        <option value="08">08</option>
+                        <option value="09">09</option>
+                        <option value="10">10</option>
+                        <option value="11">11</option>
+                        <option value="12">12</option>
+                      </select>
+                      <select class="required" id="payment_credit_card_year" name="payment[credit_card][year]" tabindex="5">
+                        <option value="2011">2011</option>
+                        <option value="2012">2012</option>
+                        <option value="2013">2013</option>
+                        <option value="2014">2014</option>
+                        <option value="2015">2015</option>
+                        <option value="2016">2016</option>
+                        <option value="2017">2017</option>
+                        <option value="2018">2018</option>
+                        <option value="2019">2019</option>
+                        <option value="2020">2020</option>
+                        <option value="2021">2021</option>
+                        <option value="2022">2022</option>
+                        <option value="2023">2023</option>
+                        <option value="2024">2024</option>
+                        <option value="2025">2025</option>
+                        <option value="2026">2026</option>
+                        <option value="2027">2027</option>
+                        <option value="2028">2028</option>
+                        <option value="2029">2029</option>
+                        <option value="2030">2030</option>
+                        <option value="2031">2031</option>
+                      </select>
+                    </dd>
+                    <dt><label for="payment_credit_card_billing_address">Billing address: </label></dt>
+                    <dd><input class="required" id="payment_credit_card_billing_address" name="payment[credit_card][billing_address]" size="20" tabindex="5" type="text" /></dd>
+                    <dt><label for="payment_credit_card_zip_code">Zip code: </label></dt>
+                    <dd><input class="required" id="payment_credit_card_zip_code" name="payment[credit_card][zip_code]" size="20" tabindex="5" type="text" /></dd>
+                  </dl>
+                  <dl class="inline general">
+                    <dt><label for="payment_date_1i">Date: </label></dt>
+                    <dd>
+                      <select id="payment_date_1i" name="payment[date(1i)]" tabindex="-1">
+                        <option value="2006">2006</option>
+                        <option value="2007">2007</option>
+                        <option value="2008">2008</option>
+                        <option value="2009">2009</option>
+                        <option value="2010">2010</option>
+                        <option selected="selected" value="2011">2011</option>
+                        <option value="2012">2012</option>
+                        <option value="2013">2013</option>
+                        <option value="2014">2014</option>
+                        <option value="2015">2015</option>
+                        <option value="2016">2016</option>
+                      </select>
+                      <select id="payment_date_2i" name="payment[date(2i)]" tabindex="-1">
+                        <option value="1">January</option>
+                        <option value="2">February</option>
+                        <option selected="selected" value="3">March</option>
+                        <option value="4">April</option>
+                        <option value="5">May</option>
+                        <option value="6">June</option>
+                        <option value="7">July</option>
+                        <option value="8">August</option>
+                        <option value="9">September</option>
+                        <option value="10">October</option>
+                        <option value="11">November</option>
+                        <option value="12">December</option>
+                      </select>
+                      <select id="payment_date_3i" name="payment[date(3i)]" tabindex="-1">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10">10</option>
+                        <option value="11">11</option>
+                        <option value="12">12</option>
+                        <option value="13">13</option>
+                        <option value="14">14</option>
+                        <option value="15">15</option>
+                        <option value="16">16</option>
+                        <option value="17">17</option>
+                        <option value="18">18</option>
+                        <option value="19">19</option>
+                        <option value="20">20</option>
+                        <option value="21">21</option>
+                        <option value="22">22</option>
+                        <option value="23">23</option>
+                        <option value="24">24</option>
+                        <option value="25">25</option>
+                        <option value="26">26</option>
+                        <option value="27">27</option>
+                        <option value="28">28</option>
+                        <option selected="selected" value="29">29</option>
+                        <option value="30">30</option>
+                        <option value="31">31</option>
+                      </select>
+                    </dd>
+                    <dt><label for="payment_user_id">User: </label></dt>
+                    <dd>
+                      <select class="required" id="payment_user_id" name="payment[user_id]" tabindex="-1">
+                        <option value="">Please select a user</option>
+                        <option value="106">Alea  Brager</option>
+                        <option value="141">Amie  Kuttruff</option>
+                        <option value="130">Christina  Calkins</option>
+                        <option value="129">David  Rath</option>
+                        <option value="151">Deeann  Hassen</option>
+                        <option value="146">Elizabeth  Starr Lilly</option>
+                        <option value="107">Erde  Sun</option>
+                        <option value="155">Eric L. Ellis</option>
+                        <option value="108">Gael  Nagle</option>
+                        <option value="136">George  Beekman</option>
+                        <option value="103">Gwen  Healy</option>
+                        <option value="145">Hillary  Atiyeh</option>
+                        <option value="131">Ida  Cunnigham</option>
+                        <option value="137">Jake  Torossian</option>
+                        <option value="153">John  Holley</option>
+                        <option value="158">Julia  Kearns</option>
+                        <option value="110">Karen  Dean</option>
+                        <option value="138">Kelly  Adams</option>
+                        <option value="152">Leona  Watkins</option>
+                        <option value="104">Margaret  Duperly</option>
+                        <option value="126">Nicole  Garcia</option>
+                        <option value="101">Paul Joseph Westfall</option>
+                        <option value="112">Peter  Moore</option>
+                        <option value="114">Quija  Moonflower</option>
+                        <option value="148">Rachel  Ashley</option>
+                        <option value="159">Regenia  Benton</option>
+                        <option value="132">Richard  Baynton</option>
+                        <option value="139">Shaundee  Laws</option>
+                        <option value="102" selected="selected">Shawn  Liebling</option>
+                        <option value="115">Tim  McDevitt</option>
+                        <option value="105">Tom  Robinson</option>
+                        <option value="149">Tracy  Grainger</option>
+                      </select>
+                    </dd>
+                    <dt><label for="payment_note">Note: </label></dt>
+                    <dd><textarea cols="20" id="payment_note" name="payment[note]" rows="3" tabindex="-1"></textarea></dd>
+                  </dl>
+                </div>
+              </div>
+        
+              <hr />
+         
+              <div class="submission controls">
+                <span class="submit-control cancel-control"><a href="/reservation/23210/payments" tabindex="-1">Cancel</a></span>
+                <span class="show-by-type CreditCard">
+                  <input id="payment_submit_purchase" name="commit" tabindex="7" type="submit" value="Purchase" />
+                  <input id="payment_submit_authorize" name="commit" tabindex="7" type="submit" value="Authorize" />
+                </span>
+                <input id="payment_submit_record" name="commit" tabindex="7" type="submit" value="Record" />
+              </div>
+        
+            </form>
+        
+          </div>
+        </div> <!-- #register-template -->
 </html>

@@ -8,6 +8,20 @@ function pretty_print(object) {
   print(debug + "}")
 }
 
+function fireEvent(element,event){
+  if (document.createEventObject){
+    // dispatch for IE
+    var evt = document.createEventObject();
+    return element.fireEvent('on'+event,evt)
+  }
+  else{
+    // dispatch for firefox + others
+    var evt = document.createEvent("HTMLEvents");
+    evt.initEvent(event, true, true ); // event type,bubbling,cancelable
+    return !element.dispatchEvent(evt);
+  }
+}
+
 function is_instance_of(object, function_ref, message) {
   var def_msg = object + ' should be an instanceof ' + function_ref
   ok(object instanceof function_ref, $A(message,def_msg).join(" : "))
@@ -16,6 +30,33 @@ function is_instance_of(object, function_ref, message) {
 function is_undefined(object, message) {
   ok(typeof(object) == 'undefined', message)
 }
+
+// deepEqual fails when comparing Prototype Elements
+function equal_element(actual, expected, deep) {
+  var message = "Expected: " + expected.toString() + " but was " + actual.toString()
+  equal(actual.toString(), expected.toString(), message)
+  message = "Expected " + expected.attributes.length + " attributes but found " + actual.attributes.length
+  equal(actual.attributes.length, expected.attributes.length, message)
+  $A(expected.attributes).each(function(ex) {
+    ac = actual.attributes[ex.name]
+    message = "Expected attribute '" + ex.name + "' to be '" + ex.value + "' but found: '" + ac.value + "'"
+    equal(ac.value, ex.value, message)
+  })
+  if (deep) {
+    message = "Expected innerHTML: " + expected.innerHTML + "\n but was: " + actual.innerHTML
+    equal(actual.innerHTML, expected.innerHTML, message)
+  }
+}
+
+function equal_elements(actual, expected, deep) {
+  var message = "Expected " + expected.length + " elements but found " + actual.length
+  message = message + "\nExpected: " + expected.inspect() + "\nActual: " + actual.inspect()
+  equal(actual.length, expected.length, message)
+  $A(actual).zip(expected).each(function(pair) {
+    equal_element(pair[0], pair[1], deep)
+  })
+}
+
 // Reinitializes gold data for test configuration and comparisons.
 function GoldData() {
 
@@ -137,7 +178,44 @@ function GoldData() {
 
   this.payment = { }
 
-  this.ledger = [ ]
+  this.ledger = [
+    {
+      id: 38,
+      type: "Asset",
+      account_number: "1010.000",
+      account_name: "Cash",
+      debit: null,
+      credit: 8.0,
+      detail: '',
+      register_code: "CA",
+      code_label: "Change",
+      code_type: "change",
+    },
+    {
+      id: 37,
+      type: "Asset",
+      account_number: "1010.000",
+      account_name: "Cash",
+      debit: 40.0,
+      credit: null,
+      detail: '',
+      register_code: "CA",
+      code_label: "Cash",
+      code_type: "payment",
+    },
+    {
+      id: 36,
+      type: "Income",
+      account_number: "4210.000",
+      account_name: "Store Purchase",
+      debit: null,
+      credit: 32.0,
+      detail: '',
+      register_code: "ST",
+      code_label: "Store Purchase",
+      code_type: "purchase",
+    },
+  ]
 
   this.template = $('register-template').innerHTML
 
