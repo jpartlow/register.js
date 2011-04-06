@@ -3,6 +3,15 @@
 var Register = {
   version: '0.1.0',
   debug: false,
+  registers: $H(),
+
+  // Create a new Register.Instance from config and store it in the
+  // Register.registers hash.
+  create: function(config) {
+    var register = new Register.Instance(config)
+    this.registers.set(register.id(), register)
+    return register
+  },
 }
 
 //////////////////////
@@ -164,7 +173,24 @@ Register.Instance = function(config) {
   this.ui = new Register.UI(this, this.config.template)
 }
 Register.Instance.inherits(Register.Core)
+// Constants
+Register.Instance.NEW_MARKER = "__new__"
+// Methods
 Object.extend(Register.Instance.prototype, {
+  // Payment identifier for this register or Register.Instance.NEW_MARKER if this is for a new payment.
+  id: function() {
+    return this.payment.id || Register.Instance.NEW_MARKER
+  },
+
+  // True if instance is for a new payment.
+  is_new: function() {
+    return this.id() === Register.Instance.NEW_MARKER 
+  },
+
+  // Register's root element.
+  root: function() {
+    return this.ui.root
+  },
 })
 
 /////////////////////
@@ -448,7 +474,15 @@ Object.extend(Register.UI.prototype, {
       // initialize callback functions in the root register so that it will respond to
       // user actions
       this.initialize_register_callbacks()
+      // set the register's title header
+      this.set_title()
     }
+  },
+
+  set_title: function() {
+    var title = this.register.is_new() ? "New Payment" : "Payment #" + this.register.id()
+    this.root.down('.title').update(title)
+    return title 
   },
 
   // Generate and return a set of select options.  One option is generated for each object in

@@ -217,9 +217,7 @@ function GoldData() {
     },
   ]
 
-  this.template = $('register-template').innerHTML
-
-  this.ledger_entry_row_template = $('ledger-entry-row-template')
+  this.template = this.extract_register_template()
 }
 GoldData.prototype = {
   new_payment_register_config: function() {
@@ -240,5 +238,14 @@ GoldData.prototype = {
       ledger: this.ledger,
       template: this.template,
     }
+  },
+
+  extract_register_template: function() {
+    if (typeof(GoldData.register_template) == 'undefined') {
+      var register = $('register').remove()
+      var wrapper = new Element('div').update(register)
+      GoldData.register_template  = wrapper.innerHTML
+    }
+    return GoldData.register_template
   },
 }

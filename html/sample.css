@@ -1,0 +1,50 @@
+#register {
+  font-family: arial;
+  margin: 10px 5px 5px 5px;
+  border: 3px outset blue;
+  background-color: #f0f0e0;
+  padding: 3px;
+  width: 800px;
+  -moz-border-radius: 6px;
+}
+.title {
+  font-size: larger;
+  font-weight: bold;
+  text-align: center;
+}
+.column {
+  float: left;
+  margin: 2px 5px;
+}
+hr {
+  clear: both;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+hr.subtle {
+  clear: none;
+  border-bottom: 1px solid gray;
+  margin: 2px 0;
+}
+dl.inline {
+  margin: 0;
+  padding: 0;
+}
+dl.inline dt {
+  clear: left;
+  float: left;
+  text-align: right;
+  width: 10em;
+}
+dl.inline dd {
+  float: left;
+  margin: 0 0 5px 10px;
+}
+.submission.controls {
+  text-align: right;
+  background-color: #c0c0e0;
+}
+.submission.controls .cancel-control {
+  float: left;
+}

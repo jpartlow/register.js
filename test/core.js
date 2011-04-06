@@ -351,6 +351,12 @@ test("register-ui-add-ledger-row", function() {
   equal(ui.rows.length, original_ui_row_count + 1)
 })
 
+test("register-ui-sets-title", function() {
+  expect(1)
+  var ui = this.register.ui
+  equal(ui.root.down('.title').textContent, 'New Payment')
+})
+
 test("register-initialization", function() {
   expect(2)
   var ledger = this.register.ledger
