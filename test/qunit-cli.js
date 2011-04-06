@@ -1,3 +1,7 @@
+// From: https://github.com/asynchrony/qunit.git (consistent-checks branch)
+// And Changed per:
+// http://twoguysarguing.wordpress.com/2010/11/26/qunit-cli-running-qunit-with-rhino/
+
 /*
  * QUnit - A JavaScript Unit Testing Framework
  * 
@@ -1297,3 +1301,15 @@ QUnit.diff = (function() {
 })();
 
 })(this);
+
+// Changed per:
+// http://twoguysarguing.wordpress.com/2010/11/26/qunit-cli-running-qunit-with-rhino/
+var current_object_parser = QUnit.jsDump.parsers.object;
+QUnit.jsDump.setParser('object', function(obj) {
+  if(typeof obj.rhinoException !== 'undefined') {
+    return obj.name + " { message: '" + obj.message + "', fileName: '" + obj.fileName + "', lineNumber: " + obj.lineNumber + " }";
+  }
+  else {
+    return current_object_parser(obj);
+  }
+});
