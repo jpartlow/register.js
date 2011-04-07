@@ -138,6 +138,13 @@ test("init-code", function() {
   var code = new Register.Code(code_data)
   strictEqual(code.id, code_data.id)
   strictEqual(code.label, code_data.label)
+  strictEqual(code.code, code_data.code)
+  strictEqual(code.account_number, code_data.account_number)
+  strictEqual(code.account_name, code_data.account_name)
+  strictEqual(code.fee_types, code_data.fee_types)
+  strictEqual(code.account_type, code_data.account_type)
+  strictEqual(code.debit_or_credit, code_data.debit_or_credit)
+  strictEqual(code.payment_type, code_data.payment_type)
 })
 
 module("register-new-payment", {
@@ -357,11 +364,43 @@ test("register-ui-sets-title", function() {
   equal(ui.root.down('.title').textContent, 'New Payment')
 })
 
+test("register-ui-get-payment-type", function() {
+  expect(2)
+  var py = this.gold.payment_codes[0]
+  var py2 = this.gold.payment_codes[1]
+  var ui = this.register.ui
+  equal(ui.get_payment_type(), py.payment_type)
+  ui.payment_codes_select.value = py2.id
+  equal(ui.get_payment_type(), py2.payment_type)
+})
+
+test("register-ui-sets-payment-fields", function() {
+  expect(2)
+  var py = this.gold.payment_codes[1]
+  var ui = this.register.ui
+  equal(ui.get_payment_fields().length, 6)
+  console.log(ui.get_payment_fields())
+  ui.payment_codes_select.value = py.id
+  ui.setup_payment_type_fields()
+  console.log(ui.get_payment_fields())
+  equal(ui.get_payment_fields().length, 7)
+})
+
 test("register-initialization", function() {
   expect(2)
   var ledger = this.register.ledger
   deepEqual(ledger.config, {})
   deepEqual(ledger.rows, [])
+})
+
+test("register-find-code", function() {
+  expect(3)
+  var pc = this.gold.purchase_codes[0]
+  var py = this.gold.payment_codes[0]
+  var cr = this.gold.credit_codes[0]
+  deepEqual(this.register.find_code(pc.id), new Register.Code(pc))
+  deepEqual(this.register.find_code(py.id), new Register.Code(py))
+  deepEqual(this.register.find_code(cr.id), new Register.Code(cr))
 })
 
 test("register-ledger-count", function() {

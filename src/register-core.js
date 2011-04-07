@@ -144,6 +144,7 @@ Register.Exceptions = {
     this.message = "Unable to find " + selector + " in " + element
   },
 }  
+Register.Exceptions.generate_exception_type('RegisterException')
 Register.Exceptions.generate_exception_type('LedgerException')
 Register.Exceptions.generate_exception_type('LedgerRowException')
 Register.Exceptions.MissingElementException.prototype = new Register.Exceptions.BaseException()
@@ -168,6 +169,7 @@ Register.Instance = function(config) {
   this.purchase_codes = this.initialize_array_of(Register.Code, this.config.purchase_codes)
   this.payment_codes = this.initialize_array_of(Register.Code, this.config.payment_codes)
   this.credit_codes = this.initialize_array_of(Register.Code, this.config.credit_codes)
+  this.__generate_code_index()
   this.ledger = new Register.Ledger(this, this.config.ledger)
   this.payment = new Register.Payment(this, this.config.payment)
   this.ui = new Register.UI(this, this.config.template)
@@ -191,6 +193,26 @@ Object.extend(Register.Instance.prototype, {
   root: function() {
     return this.ui.root
   },
+
+  // Lookup a purchase, payment, or credit code by unique id.
+  find_code: function(code_id) {
+    return this.code_index.get(code_id)
+  },
+
+  // Creates a Hash to index all of the purchase/payment/credit codes by id.
+  // Will throw a RegisterException if two codes have the same id.
+  __generate_code_index: function() {
+    this.code_index = $H()
+    var codes = $A([this.purchase_codes, this.payment_codes, this.credit_codes]).flatten().compact()
+    codes.inject(this.code_index, function(index, code) {
+      index.set(code.id, code)
+      return index  
+    })
+    if (codes.size() != this.code_index.size()) {
+      throw(new Register.Exceptions.RegisterException('__generate_code_index', "Overlapping code ids."))
+    }
+    return this.code_index
+  },
 })
 
 /////////////////////
@@ -204,7 +226,7 @@ Register.Code = function(config) {
   var configure = function(field) {
     this[field] = this.config[field]
   }.bind(this)
-  $A(['id', 'code', 'label', 'account_number', 'account_name', 'fee_types', 'account_type', 'debit_or_credit']).each(configure)
+  $A(['id', 'code', 'label', 'account_number', 'account_name', 'fee_types', 'account_type', 'debit_or_credit','payment_type']).each(configure)
 }
 Register.Code.inherits(Register.Core)
 Object.extend(Register.Code.prototype, {
@@ -451,6 +473,7 @@ Register.UI.inherits(Register.Core)
 Register.UI.LEDGER_ENTRIES_ID = 'ledger-entries'
 Register.UI.LEDGER_ROW_TEMPLATE_ID = 'ledger-entry-row-template'
 Register.UI.PAYMENT_CODES_SELECT_ID = 'payment-type'
+Register.UI.PAYMENT_FIELDS_ID = 'payment-fields'
 Register.UI.PURCHASE_AMOUNT_INPUT_ID = 'purchase-amount'
 Register.UI.PURCHASE_CODES_SELECT_ID = 'purchase-code'
 Register.UI.PURCHASE_CODES_SELECT_BLANK_VALUE = '*Blank*'
@@ -464,8 +487,10 @@ Object.extend(Register.UI.prototype, {
       // isolate ledger_row_template and set the root register element
       this.ledger_row_template = this.locate(Register.UI.LEDGER_ROW_TEMPLATE_ID, this.register_template).remove()
       this.root = this.register_template.cloneNode(true)
+      // isolate other important elements
       this.ledger_entries = this.locate(Register.UI.LEDGER_ENTRIES_ID)
       this.purchase_amount_input = this.locate(Register.UI.PURCHASE_AMOUNT_INPUT_ID)
+      this.payment_fields = this.locate(Register.UI.PAYMENT_FIELDS_ID)
       // populate select controls with codes
       this.purchase_codes_select = this.locate(Register.UI.PURCHASE_CODES_SELECT_ID)
       this.update_from_array(this.purchase_codes_select, this.make_options(this.purchase_codes, 'id', 'label', { value: Register.UI.PURCHASE_CODES_SELECT_BLANK_VALUE, label: '- Select a code -' }))
@@ -476,7 +501,41 @@ Object.extend(Register.UI.prototype, {
       this.initialize_register_callbacks()
       // set the register's title header
       this.set_title()
+      // set visible payment fields
+      this.setup_payment_type_fields()
     }
+  },
+
+  // Returns an Array of the visible payment fields.
+  get_payment_fields: function() {
+    return this.payment_fields.select('input','select','textarea').findAll(function(e) {
+      return !e.disabled
+    })
+  },
+
+  // Returns the payment code object associated with the currently selected payment type.
+  get_payment_code: function() {
+    return this.register.find_code(this.payment_codes_select.value)
+  },
+
+  // Returns the current payment_type string value as determined by the setting
+  // of the payment-type select control.
+  get_payment_type: function() {
+    return this.get_payment_code().payment_type
+  },
+
+  // Hides or shows and enables or disables payment fields based on the
+  // currently selected payment type.
+  setup_payment_type_fields: function() {
+    var payment_type = this.get_payment_type()
+    this.payment_fields.select('.show-by-type').each(function(e) {
+      e.hide()
+      e.select('input','select','textarea').invoke('disable')
+    })
+    this.payment_fields.select('.show-by-type.' + payment_type).each(function(e) {
+      e.select('input','select','textarea').invoke('enable')
+      e.show()
+    })
   },
 
   set_title: function() {

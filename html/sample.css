@@ -4,7 +4,7 @@
   border: 3px outset blue;
   background-color: #f0f0e0;
   padding: 3px;
-  width: 800px;
+  width: 950px;
   -moz-border-radius: 6px;
 }
 .title {
@@ -27,6 +27,20 @@ hr.subtle {
   border-bottom: 1px solid gray;
   margin: 2px 0;
 }
+#ledger .label {
+  width: 9em;
+}
+#ledger .debit,
+#ledger .credit {
+  width: 5em;
+}
+#ledger .detail {
+  width: 7em;
+}
+#ledger .remove {
+  font-weight: bold;
+  color: red;
+}
 dl.inline {
   margin: 0;
   padding: 0;
@@ -43,8 +57,9 @@ dl.inline dd {
 }
 .submission.controls {
   text-align: right;
-  background-color: #c0c0e0;
+  background-color: #d9d9e0;
 }
 .submission.controls .cancel-control {
   float: left;
+  margin-top: 3px;
 }
