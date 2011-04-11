@@ -486,9 +486,10 @@ Object.extend(Register.LedgerRow.prototype, {
     return value
   },
 
-  // Updates the given field with the requested value through it's setter method,
-  // then fires 'update' callbacks.
+  // Unless row is read_only, updates the given field with the requested value
+  // through it's setter method, then fires 'update' callbacks.
   update: function(name, value) {
+    if (this.read_only) { return false }
     var result = this["set_" + name](value)
     this.fire('update')
     return result
@@ -750,11 +751,10 @@ Object.extend(Register.UI.Row.prototype, {
     this.ledger_row.add_listener('update', this.update.bind(this))
     this.ledger_row.add_listener('destroy', this.destroy.bind(this))
     this.initialize_callbacks()
-    this.disable() // by default - selectively enabled by update()
     this.update()
   },
 
-  // Initializes the specified input control with meta data for
+  // Initializes the specified input control with meta data and helper functions for
   // callbacks.
   initialize_input: function(name) {
     var selector = Register.UI.Row[name.toUpperCase() + "_SELECTOR"]
@@ -763,20 +763,28 @@ Object.extend(Register.UI.Row.prototype, {
     input.ledger_field_name = name
     if (name == 'credit' || name == 'debit') {
       input.is_a_credit_or_debit_field = true
-      // Keep a reference to the plain enable()
-      input.enable_without_value_test = input.enable
-
-      // A credit field should only enable if the row is a credit and vice-versa
-      input.allow_enable = function() {
-        return this.ledger_row["is_" + name]()
-      }.bind(this)
-
-      // New enable tests to see if it is allowed
-      input.enable = function() {
-        if (this.allow_enable()) { this.enable_without_value_test() }
-        return this
-      } 
     }
+
+    // If row is read-only, inputs should be disabled.
+    // A debit or credit field should only enable if the row is a debit or credit.
+    input.allow_enable = function() {
+      var ledger_row = this.ui_row.ledger_row
+      var enable_allowed = true
+      if (ledger_row.read_only ||
+         (this.is_a_credit_or_debit_field &&
+          !ledger_row["is_" + this.ledger_field_name]())) {
+        enable_allowed = false
+      }
+      return enable_allowed
+    }
+
+    input.reset_enable = function() {
+      this.allow_enable() ?
+        this.enable() :
+        this.disable()
+      return input
+    }
+
     return input 
   },
 
@@ -786,9 +794,7 @@ Object.extend(Register.UI.Row.prototype, {
     this.__set('debit', true)
     this.__set('credit', true)
     this.__set('detail')
-    this.ledger_row.read_only ? 
-      this.disable() :
-      this.enable()
+    this.reset_enable()
     return this
   },
 
@@ -805,6 +811,12 @@ Object.extend(Register.UI.Row.prototype, {
   // Returns an Array of the row's form controls.
   get_controls: function() {
     return this.root.select('input','select','textarea')
+  },
+
+  // Reset the row's form controls to be either enabled or disabled based on state.
+  // (Whether they are read-only or empty debit or credit inputs)
+  reset_enable: function() {
+    this.get_controls().invoke('reset_enable')
   },
 
   // Enable all of the row's form controls.

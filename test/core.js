@@ -435,7 +435,7 @@ test("register-ui-add-ledger-row", function() {
 })
 
 test("register-ui-row-enable-disable", function() {
-  expect(4)
+  expect(5)
   var ui = this.register.ui
   var pc = this.gold.purchase_codes[0]
   ui_lr = ui.add_ledger_row(pc.id, '50')
@@ -444,7 +444,26 @@ test("register-ui-row-enable-disable", function() {
   ui_lr.disable()
   deepEqual(ui_lr.get_controls().pluck('disabled'), [true, true, true, true])
   ui_lr.enable()
+  deepEqual(ui_lr.get_controls().pluck('disabled'), [false, false, false, false])
+  ui_lr.reset_enable()
   deepEqual(ui_lr.get_controls().pluck('disabled'), [true, false, false, false])
+})
+
+test("register-ui-row-enable-disable-after-amount-flips", function() {
+  expect(4)
+  var ui = this.register.ui
+  var pc = this.gold.purchase_codes[0]
+  ui_lr = ui.add_ledger_row(pc.id, '50')
+  equal(pc.debit_or_credit, "C")
+  deepEqual(ui_lr.get_controls().pluck('disabled'), [true, false, false, false], "Debit control should be disabled because this row has a credit value.")
+
+  ui_lr.credit.value = '-50'
+  fireEvent(ui_lr.credit, 'change')
+  deepEqual(ui_lr.get_controls().pluck('disabled'), [false, true, false, false], "Now credit control should be disabled.")
+
+  ui_lr.debit.value = '-25'
+  fireEvent(ui_lr.debit, 'change')
+  deepEqual(ui_lr.get_controls().pluck('disabled'), [true, false, false, false], "And back again.")
 })
 
 test("register-ui-row-values", function() {
