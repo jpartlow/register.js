@@ -49,6 +49,24 @@ test("inherits", function() {
   equal(b.foo, 'foo')
 })
 
+test("monetize", function() {
+  expect(13)
+  var core = new Register.Core()
+  equal(core.monetize(45)         , '45.00')
+  equal(core.monetize('45')       , '45.00')
+  equal(core.monetize(34.0, true) , '$34.00')
+  equal(core.monetize(0.12)       , '0.12')
+  equal(core.monetize('.12', true), '$0.12')
+  equal(core.monetize('foo')      , 'foo')
+  equal(core.monetize('foo', true), 'foo')
+  equal(core.monetize('')         , '')
+  equal(core.monetize('', true)   , '')
+  equal(core.monetize(' ')        , ' ')
+  equal(core.monetize(' ', true)  , ' ')
+  equal(core.monetize(null)       , null)
+  equal(core.monetize(undefined)  , undefined)
+})
+
 test("gold-data", function() {
   expect(4)
   gd = new GoldData()
@@ -158,8 +176,31 @@ test("initialize", function() {
   is_instance_of(this.register, Register.Instance)
 })
 
+test("register-initialization", function() {
+  expect(2)
+  var ledger = this.register.ledger
+  deepEqual(ledger.config, {})
+  deepEqual(ledger.rows, [])
+})
+
+test("register-find-code", function() {
+  expect(3)
+  var pc = this.gold.purchase_codes[0]
+  var py = this.gold.payment_codes[0]
+  var cr = this.gold.credit_codes[0]
+  deepEqual(this.register.find_code(pc.id), new Register.Code(pc))
+  deepEqual(this.register.find_code(py.id), new Register.Code(py))
+  deepEqual(this.register.find_code(cr.id), new Register.Code(cr))
+})
+
+test("register-ledger-count", function() {
+  expect(1)
+  var ledger = this.register.ledger
+  equal(ledger.count(), 0)
+})
+
 test("register-ledger-row-initialize", function() {
-  expect(11)
+  expect(13)
   var pc = this.gold.purchase_codes[0]
   var lr = new Register.LedgerRow({
     code_type: 'purchase',
@@ -169,7 +210,9 @@ test("register-ledger-row-initialize", function() {
   is_instance_of(lr, Register.LedgerRow)
   // accessors
   strictEqual(lr.get_credit(), 10)
+  ok(lr.is_credit())
   is_undefined(lr.get_debit())
+  ok(!lr.is_debit())
   strictEqual(lr.get_amount(), 10)
   equal(lr.get_label(), pc.label)
   is_undefined(lr.get_detail())
@@ -220,13 +263,15 @@ test("register-ledger-row-bad-initialization", function() {
 })
 
 test("register-ledger-row-initialize-from-existing", function() {
-  expect(11)
+  expect(13)
   var ldata1 = this.gold.ledger[1]
   var lr = new Register.LedgerRow(ldata1)
   is_instance_of(lr, Register.LedgerRow)
   // accessors
   strictEqual(lr.get_debit(), parseFloat(ldata1.debit))
+  ok(lr.is_debit())
   is_undefined(lr.get_credit())
+  ok(!lr.is_credit())
   strictEqual(lr.get_amount(), parseFloat(ldata1.debit))
   equal(lr.get_label(), ldata1.code_label)
   is_undefined(lr.get_detail())
@@ -239,7 +284,7 @@ test("register-ledger-row-initialize-from-existing", function() {
 })
 
 test("register-ledger-row-set-amount", function() {
-  expect(12)
+  expect(20)
   var pc = this.gold.purchase_codes[0]
   var config = {
     code_type: 'purchase',
@@ -249,18 +294,29 @@ test("register-ledger-row-set-amount", function() {
   var lr = new Register.LedgerRow(config)
   strictEqual(lr.get_credit(), 10.0)
   is_undefined(lr.get_debit())
+  ok(lr.is_credit())
+  ok(!lr.is_debit())
   strictEqual(lr.get_amount(), 10.0)
+
   lr.set_credit('15')
   strictEqual(lr.get_credit(), 15.0)
   is_undefined(lr.get_debit())
+  ok(lr.is_credit())
+  ok(!lr.is_debit())
   strictEqual(lr.get_amount(), 15.0)
+
   lr.set_debit('6')
   is_undefined(lr.get_credit())
   strictEqual(lr.get_debit(), 6.0)
+  ok(!lr.is_credit())
+  ok(lr.is_debit())
   strictEqual(lr.get_amount(), -6.0)
+
   lr.set_debit('-15.5')
   strictEqual(lr.get_credit(), 15.5)
   is_undefined(lr.get_debit())
+  ok(lr.is_credit())
+  ok(!lr.is_debit())
   strictEqual(lr.get_amount(), 15.5)
 })
 
@@ -270,6 +326,26 @@ test("register-ledger-add", function() {
   var original_count = ledger.count() 
   ledger.add('purchase', '1','40')
   equal(ledger.count(), original_count + 1)
+})
+
+test("register-ledger-remove", function() {
+  expect(2)
+  var ledger = this.register.ledger
+  var original_count = ledger.count() 
+  var lr = ledger.add('purchase', '1','40')
+  equal(ledger.count(), original_count + 1)
+  ledger.remove(lr)
+  equal(ledger.count(), original_count)
+})
+
+test("register-ledger-row-destroy", function() {
+  expect(2)
+  var ledger = this.register.ledger
+  var original_count = ledger.count() 
+  var lr = ledger.add('purchase', '1','40')
+  equal(ledger.count(), original_count + 1)
+  lr.destroy() 
+  equal(ledger.count(), original_count)
 })
 
 test("register-ui-initialization", function() {
@@ -358,6 +434,66 @@ test("register-ui-add-ledger-row", function() {
   equal(ui.rows.length, original_ui_row_count + 1)
 })
 
+test("register-ui-row-enable-disable", function() {
+  expect(4)
+  var ui = this.register.ui
+  var pc = this.gold.purchase_codes[0]
+  ui_lr = ui.add_ledger_row(pc.id, '50')
+  equal(pc.debit_or_credit, "C")
+  deepEqual(ui_lr.get_controls().pluck('disabled'), [true, false, false, false], "Debit control should be disabled because this row has a credit value.")
+  ui_lr.disable()
+  deepEqual(ui_lr.get_controls().pluck('disabled'), [true, true, true, true])
+  ui_lr.enable()
+  deepEqual(ui_lr.get_controls().pluck('disabled'), [true, false, false, false])
+})
+
+test("register-ui-row-values", function() {
+  expect(4)
+  var ui = this.register.ui
+  var pc = this.gold.purchase_codes[0]
+  ui_lr = ui.add_ledger_row(pc.id, '50')
+  equal(ui_lr.label.textContent, pc.label)
+  equal(ui_lr.debit.value, '')
+  equal(ui_lr.credit.value, '50.00')
+  equal(ui_lr.detail.value, '')
+})
+
+test("register-ui-row-change-updates-ledger-row", function() {
+  expect(6)
+  var ui = this.register.ui
+  var pc = this.gold.purchase_codes[0]
+  ui_lr = ui.add_ledger_row(pc.id, '50')
+  lr = ui_lr.ledger_row
+  ui_lr.credit.value = '100.55'
+  fireEvent(ui_lr.credit, 'change')
+  equal(lr.get_credit(), 100.55)
+
+  ui_lr.credit.value = '-50'
+  fireEvent(ui_lr.credit, 'change')
+  equal(lr.get_debit(), 50)
+  equal(ui_lr.debit.value, '50.00')
+
+  ui_lr.debit.value = 'foo'
+  fireEvent(ui_lr.debit, 'change')
+  equal(ui_lr.last_alert, 'Please enter a number')
+  equal(lr.get_debit(), 50)
+  equal(ui_lr.debit.value, '50.00')
+})
+
+test("register-ui-row-set-to-zero-destroys", function() {
+  expect(2)
+  var ui = this.register.ui
+  var ledger = this.register.ledger
+  var pc = this.gold.purchase_codes[0]
+  ui_lr = ui.add_ledger_row(pc.id, '50')
+  var ledger_row_count = ledger.count()
+  var ui_row_count = ui.rows.length
+  ui_lr.credit.value = '0'
+  fireEvent(ui_lr.credit, 'change')
+  equal(ledger.count(), ledger_row_count - 1)
+  equal(ui.rows.length, ui_row_count - 1)
+})
+
 test("register-ui-sets-title", function() {
   expect(1)
   var ui = this.register.ui
@@ -379,32 +515,18 @@ test("register-ui-sets-payment-fields", function() {
   var py = this.gold.payment_codes[1]
   var ui = this.register.ui
   equal(ui.get_payment_fields().length, 6)
-  console.log(ui.get_payment_fields())
   ui.payment_codes_select.value = py.id
   ui.setup_payment_type_fields()
-  console.log(ui.get_payment_fields())
   equal(ui.get_payment_fields().length, 7)
 })
 
-test("register-initialization", function() {
+test("register-ui-payment-type-select-sets-fields", function() {
   expect(2)
-  var ledger = this.register.ledger
-  deepEqual(ledger.config, {})
-  deepEqual(ledger.rows, [])
-})
-
-test("register-find-code", function() {
-  expect(3)
-  var pc = this.gold.purchase_codes[0]
-  var py = this.gold.payment_codes[0]
-  var cr = this.gold.credit_codes[0]
-  deepEqual(this.register.find_code(pc.id), new Register.Code(pc))
-  deepEqual(this.register.find_code(py.id), new Register.Code(py))
-  deepEqual(this.register.find_code(cr.id), new Register.Code(cr))
-})
-
-test("register-ledger-count", function() {
-  expect(1)
-  var ledger = this.register.ledger
-  equal(ledger.count(), 0)
+  var py = this.gold.payment_codes[1]
+  var ui = this.register.ui
+  var py_select = ui.payment_codes_select
+  equal(ui.get_payment_fields().length, 6)
+  py_select.value = py.id
+  fireEvent(py_select, 'change')
+  equal(ui.get_payment_fields().length, 7)
 })

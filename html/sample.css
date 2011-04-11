@@ -27,6 +27,9 @@ hr.subtle {
   border-bottom: 1px solid gray;
   margin: 2px 0;
 }
+#ledger .headers {
+  text-align: center;
+}
 #ledger .label {
   width: 9em;
 }
@@ -39,6 +42,12 @@ hr.subtle {
 }
 #ledger .remove {
   font-weight: bold;
+  color: red;
+}
+#ledger .ledger-entry input {
+  text-align: right;
+}
+#ledger .ledger-entry .debit input {
   color: red;
 }
 dl.inline {

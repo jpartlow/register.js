@@ -55,6 +55,7 @@ Register.Core.prototype = {
 
   alert_user: function(message) {
     if (Register.debug) {
+      this.last_alert = message
       this.log(message)
     } else {
       alert(message)
@@ -65,6 +66,26 @@ Register.Core.prototype = {
     if (typeof console !== 'undefined') {
       console.log("Register: " + message)
     }
+  },
+
+  // Present a number as a dollar amount string with two decimal places.
+  // If amount is not a number or a string which can be parsed as a number,
+  // amount will be returned as is.
+  // Default is without dollar sign.
+  // monetize(45)         => '45.00'
+  // monetize(34.0, true) => '$34.00'
+  // monetize('.12')      => '0.12'
+  // monetize('foo')      => 'foo'
+  // monetize('')         => '' 
+  // monetize(null)       => null
+  // monetize(undefined)  => null
+  monetize: function(input, dollar_sign) {
+    var amount = parseFloat(input) 
+    if (isNaN(amount)) {
+      return input
+    }
+    var decimal = amount.toFixed(2)
+    return (dollar_sign ? '$' : '') + decimal 
   },
 
   // Locate by an id string or selector string, in the Document, or in passed
@@ -242,7 +263,8 @@ Object.extend(Register.Code.prototype, {
 Register.Ledger = function(register, config) {
   this.register = register
   this.config = config || {}
-  this.rows = this.initialize_array_of(Register.LedgerRow, this.config.rows)
+  this.rows = $A()
+  $A(this.config.rows).each(function(row_config) { this.add(row_config) }.bind(this))
 }
 Register.Ledger.inherits(Register.Core)
 Object.extend(Register.Ledger.prototype, {
@@ -251,24 +273,45 @@ Object.extend(Register.Ledger.prototype, {
 
   // Add a new LedgerRow for the given type, code and amount.
   // Throws Register.Exceptions.LedgerException if cannot determine a code from code_id.
+  // Alternately, if passed a single object, it assumes it is a configuration object
+  // for an existing LedgerRow and tries to instantiate from it.
   add: function(type, code_id, amount) {
-    var code = this.register.purchase_codes.lookup(code_id)
-    if (!code) { throw(new Register.Exceptions.LedgerException('add', 'Cannot add a new row to the Ledger without a Register.Code')) }
-
-    var debit, credit
-    switch (code.debit_or_credit) {
-      case 'D': debit = amount; break
-      case 'C': credit = amount; break
-      default: throw(new Register.Exceptions.LedgerException('add', "Register.Code.debit_or_credit of unknown type: '#{type}'", { type: code.debit_or_credit }))
+    var new_row
+    if (arguments.length == 1 && typeof(arguments[0]) == "Object") {
+      new_row = new Register.LedgerRow(arguments[0]) 
+    } else {
+      var code = this.register.purchase_codes.lookup(code_id)
+      if (!code) { throw(new Register.Exceptions.LedgerException('add', 'Cannot add a new row to the Ledger without a Register.Code')) }
+  
+      var debit, credit
+      switch (code.debit_or_credit) {
+        case 'D': debit = amount; break
+        case 'C': credit = amount; break
+        default: throw(new Register.Exceptions.LedgerException('add', "Register.Code.debit_or_credit of unknown type: '#{type}'", { type: code.debit_or_credit }))
+      }
+      var new_row = new Register.LedgerRow({
+        code_type: type,
+        code: code,
+        debit: debit,
+        credit: credit,
+      })
     }
-    var new_row = new Register.LedgerRow({
-      code_type: type,
-      code: code,
-      debit: debit,
-      credit: credit,
-    })
     this.rows.push(new_row)
+    this.listen_for_destroy(new_row)
     return new_row
+  },
+
+  // Removes the given row from the ledger.
+  remove: function(row) {
+    this.rows.remove(this.rows.indexOf(row)) 
+  },
+
+  // Registers a remove call with the row's 'destroy' listener so that we remove
+  // the row from the ledger when it is destroyed.
+  listen_for_destroy: function(row) {
+    if (!row.read_only) {
+      row.add_listener('destroy', this.remove.bind(this))
+    }
   },
 
   // Add a purchase LedgerRow.
@@ -337,6 +380,10 @@ Register.LedgerRow.TYPES = $A([Register.LedgerRow.PURCHASE_TYPE, Register.Ledger
 // Methods
 Object.extend(Register.LedgerRow.prototype, {
   initialize: function() {
+    // Hash of arrays of callbacks for various potential events that other components can listen
+    // for using add_listener()
+    this.listeners = $H({ update: $A(), destroy: $A() })
+
     // set defaults from either this.config or this.code if available
     var set_default = function (args) {
       var fields = $A([args]).flatten()
@@ -366,8 +413,20 @@ Object.extend(Register.LedgerRow.prototype, {
     if (amount = this.config.debit) { this.set_debit(amount) }
     if (amount = this.config.credit) { this.set_credit(amount) }
     if (this.get_amount() == 0) {
-      throw(new Register.Exceptions.LedgerRowException('initialize', "LedgerRow amount must be a non-zero"))
+      throw(new Register.Exceptions.LedgerRowException('initialize', "LedgerRow amount must be non-zero"))
     }
+
+  },
+
+  add_listener: function(event, callback) {
+    var callbacks = this.listeners.get(event)
+    if (!callbacks) { throw(new Register.Exceptions.LedgerRowException('add_listener', "Requested callback for unknown event '#{event}'\nCallback: #{callback}", { event: event, callback: callback })) }
+    callbacks.push(callback)
+    return this
+  },
+
+  fire: function(event) {
+    $A(this.listeners.get(event)).each(function(callback) { callback(this) })
   },
 
   get_label: function() {
@@ -382,12 +441,22 @@ Object.extend(Register.LedgerRow.prototype, {
     return this.__set_amount(amount, 'debit')    
   },
 
+  // True if the ledger row is a debit amount.
+  is_debit: function() {
+    return this.debit ? true : false
+  },
+
   get_credit: function() {
     return this.credit
   },
 
   set_credit: function(amount) {
     return this.__set_amount(amount, 'credit')    
+  },
+
+  // True if the ledger row is a credit amount.
+  is_credit: function() {
+    return this.credit ? true : false
   },
 
   // Returns the credit or debit amount as a signed amount depending on account type.
@@ -414,6 +483,23 @@ Object.extend(Register.LedgerRow.prototype, {
 
   set_detail: function(value) {
     this.detail = value
+    return value
+  },
+
+  // Updates the given field with the requested value through it's setter method,
+  // then fires 'update' callbacks.
+  update: function(name, value) {
+    var result = this["set_" + name](value)
+    this.fire('update')
+    return result
+  },
+
+  // Unless row is read_only, Fires 'destroy' callbacks and deletes the
+  // instance.
+  destroy: function() {
+    if (this.read_only) { return false }
+    this.fire('destroy')
+    return true
   },
 
   __set_amount: function(raw_amount, type) {
@@ -423,6 +509,7 @@ Object.extend(Register.LedgerRow.prototype, {
     } else if (amount == 0) {
       throw( new Register.Exceptions.LedgerRowException('__set_amount', "Cannot set a LedgerRow amount to zero."))
     }
+
     var setter = function (amount, reverse) {
       if (amount < 0) {
         amount = -amount
@@ -434,13 +521,17 @@ Object.extend(Register.LedgerRow.prototype, {
       }
       return amount
     }.bind(this)
+
+    var result
     switch (type) {
       case 'credit':
-        return setter(amount, 'debit')
+        result = setter(amount, 'debit'); break
       case 'debit':
-        return setter(amount, 'credit')
+        result = setter(amount, 'credit'); break
       default: throw( new Register.Exceptions.LedgerRowException('__set_amount', "Invalid type: #{type}", { type: type }))
     }
+    
+    return result
   },
 })
 
@@ -568,6 +659,10 @@ Object.extend(Register.UI.prototype, {
     return ui_row
   },
 
+  remove_ledger_row: function(ui_row) {
+    this.rows.remove(this.rows.indexOf(ui_row))
+  },
+
   // Clear purchase amount, set purchase codes to default and move focus back to
   // purchase amount.
   reset_ledger_entry_input_controls: function() {
@@ -577,6 +672,8 @@ Object.extend(Register.UI.prototype, {
   },
 
   // Callback for user choosing an entry in the purchase code select.
+  // XXX Is there a good reason to add callbacks around the UI events?  Rather than
+  // callbacks around core register events like totals updates?
   handle_purchase_code_select: function(evnt) {
     if (this.before_purchase_code_select && !this.before_purchase_code_select()) {
       evnt.stop()
@@ -595,6 +692,11 @@ Object.extend(Register.UI.prototype, {
     }
   },
 
+  // Callback for user changing the payment type.
+  handle_payment_code_select: function(evnt) {
+    this.setup_payment_type_fields() 
+  },
+
   // Initializes callback functions on user controls in the current root register ui.
   // * purchase-code select - on change create a ledger row, update totals
   // * payment-type select - on change update register payment state and hide/show
@@ -607,7 +709,8 @@ Object.extend(Register.UI.prototype, {
   // * tabbing - keep tab cycle within register
   // * submission - validate before submit
   initialize_register_callbacks: function() {
-    this.initialize_purchase_code_controls()     
+    this.initialize_purchase_code_controls()
+    this.initialize_payment_code_controls()     
   },
 
   // Attaches onchange callback to UI purchase-code select to add new ledger rows.
@@ -615,6 +718,11 @@ Object.extend(Register.UI.prototype, {
     this.purchase_codes_select.observe('change', this.handle_purchase_code_select.bind(this))
   },
 
+  // Attaches onchange callback to UI payment-type select to change the payment type and
+  // show/hide associated fields.
+  initialize_payment_code_controls: function() {
+    this.payment_codes_select.observe('change', this.handle_payment_code_select.bind(this))
+  },
 })
 
 // Provides the HTML and events for user interaction with a ledger row in the register.
@@ -627,42 +735,127 @@ Register.UI.Row = function(ui, ledger_row) {
 Register.UI.Row.inherits(Register.Core)
 // Constants
 Register.UI.Row.LABEL_SELECTOR = '.label'
-Register.UI.Row.DEBIT_SELECTOR = '.debit'
-Register.UI.Row.CREDIT_SELECTOR = '.credit'
-Register.UI.Row.DETAIL_SELECTOR = '.detail'
+Register.UI.Row.DEBIT_SELECTOR = '.debit-row-control'
+Register.UI.Row.CREDIT_SELECTOR = '.credit-row-control'
+Register.UI.Row.DETAIL_SELECTOR = '.detail-row-control'
 Register.UI.Row.REMOVE_SELECTOR = '.remove-row-control'
 // Methods
 Object.extend(Register.UI.Row.prototype, {
   initialize: function() {
     this.label = this.locate(Register.UI.Row.LABEL_SELECTOR)
-    this.debit = this.locate(Register.UI.Row.DEBIT_SELECTOR)
-    this.credit = this.locate(Register.UI.Row.CREDIT_SELECTOR)
-    this.detail = this.locate(Register.UI.Row.DETAIL_SELECTOR)
-    this.remove = this.locate(Register.UI.Row.REMOVE_SELECTOR)
-    this.remove.observe('click', this.handle_remove.bind(this))
+    this.initialize_input('debit')
+    this.initialize_input('credit')
+    this.initialize_input('detail')
+    this.initialize_input('remove')
+    this.ledger_row.add_listener('update', this.update.bind(this))
+    this.ledger_row.add_listener('destroy', this.destroy.bind(this))
+    this.initialize_callbacks()
+    this.disable() // by default - selectively enabled by update()
     this.update()
+  },
+
+  // Initializes the specified input control with meta data for
+  // callbacks.
+  initialize_input: function(name) {
+    var selector = Register.UI.Row[name.toUpperCase() + "_SELECTOR"]
+    var input = this[name] = this.locate(selector)
+    input.ui_row = this
+    input.ledger_field_name = name
+    if (name == 'credit' || name == 'debit') {
+      input.is_a_credit_or_debit_field = true
+      // Keep a reference to the plain enable()
+      input.enable_without_value_test = input.enable
+
+      // A credit field should only enable if the row is a credit and vice-versa
+      input.allow_enable = function() {
+        return this.ledger_row["is_" + name]()
+      }.bind(this)
+
+      // New enable tests to see if it is allowed
+      input.enable = function() {
+        if (this.allow_enable()) { this.enable_without_value_test() }
+        return this
+      } 
+    }
+    return input 
   },
 
   // Set the row's html field values from the internal ledger_row values.
   update: function() {
     this.label.update(this.ledger_row.get_label())
-    this.debit.update(this.ledger_row.get_debit())
-    this.credit.update(this.ledger_row.get_credit())
-    this.detail.update(this.ledger_row.get_detail())
+    this.__set('debit', true)
+    this.__set('credit', true)
+    this.__set('detail')
+    this.ledger_row.read_only ? 
+      this.disable() :
+      this.enable()
+    return this
+  },
+
+  // Set the given input from the internal ledger_row state.
+  // Null or undefined values will be set as the empty string.
+  // Non-null numbers will be monetized if monetize_value is set true.
+  __set: function(name, monetize_value) {
+    var value = this.ledger_row["get_" + name]()
+    value = value || ''
+    this[name].value = monetize_value ? this.monetize(value) : value
+    return this
+  },
+
+  // Returns an Array of the row's form controls.
+  get_controls: function() {
+    return this.root.select('input','select','textarea')
+  },
+
+  // Enable all of the row's form controls.
+  enable: function() {
+    this.get_controls().invoke('enable')
+  },
+
+  // Disable all of the row's form controls.
+  disable: function() {
+    this.get_controls().invoke('disable')
+  },
+
+  // Setup the event callbacks for the row's controls.
+  initialize_callbacks: function() {
+    this.remove.observe('click', this.handle_remove.bind(this))
+    $A(['credit', 'debit', 'detail']).each(function(control) {
+      this[control].observe('change', this.handle_update)
+    }.bind(this))
   },
 
   handle_remove: function(evnt) {
-    this.remove() 
+    this.ledger_row.destroy()
   },
 
-  // Remove the row from the ledger.
-  remove: function() {
-    throw('implement Register.UI.Row.remove()')
+  // Not bound to UI.Row because we want the Input.value and this
+  // handle is generic to all the text Input elements in the row.
+  handle_update: function(evnt) {
+    var ui_row = this.ui_row
+    var ledger_row = ui_row.ledger_row
+    if (this.is_a_credit_or_debit_field) {
+      var numeric_value = parseFloat(this.value)
+      if (this.value.empty() || numeric_value == 0) {
+        return ledger_row.destroy()
+      } else if (isNaN(numeric_value)) {
+        ui_row.alert_user("Please enter a number")
+        ui_row.__set(this.ledger_field_name, true)
+        return false
+      }
+    }
+    return ledger_row.update(this.ledger_field_name, this.value)
+  },
+
+  // Remove the row from the ledger and destroy it.
+  destroy: function() {
+    this.root.remove() // remove from Document
+    this.ui.remove_ledger_row(this)
+    return true
   },
 })
 
 /////////////////////////
-
 // Object Utilities
 /////////////////////////
 Object.extend(Object, {
@@ -681,3 +874,14 @@ Object.extend(Object, {
     return value
   },
 })
+
+/////////////////////////
+// Array methods 
+/////////////////////////
+
+// Array Remove - By John Resig (MIT Licensed)
+Array.prototype.remove = function(from, to) {
+  var rest = this.slice((to || from) + 1 || this.length);
+  this.length = from < 0 ? this.length + from : from;
+  return this.push.apply(this, rest);
+};

@@ -25,24 +25,30 @@
                 <hr class="subtle"/>
           
                 <div id="ledger-entries" class="alternating_list">
-                   <div class="headers colored">
-                     <div class="column cell center label" title="Entry code">Code</div>
-                     <div class="column cell center debit">Debit</div>
-                     <div class="column cell center credit">Credit</div>
-                     <div class="column cell center detail">Details</div>
-                     <hr />
-                   </div>
+                  <div class="headers colored">
+                    <div class="column cell center label" title="Entry code">Code</div>
+                    <div class="column cell center debit">Debit</div>
+                    <div class="column cell center credit">Credit</div>
+                    <div class="column cell center detail">Details</div>
+                    <hr />
+                  </div>
         
-                   <div id="ledger-entry-row-template" class="ledger-entry row">
-                     <div class="column cell center label" ></div>
-                     <div class="column cell debit" ></div>
-                     <div class="column cell credit" ></div>
-                     <div class="column cell detail" ></div>
-                     <div class="column cell remove">
-                       <input class="remove-row-control" type="button" name="remove_row" value="-" tabindex="-1" />
-                     </div>
-                     <hr/> <!-- css to clear columns -->
-                   </div>
+                  <div id="ledger-entry-row-template" class="ledger-entry row">
+                    <div class="column cell center label" ></div>
+                    <div class="column cell debit" >
+                      <input class="debit-row-control" type="text" tabindex="-1" size="6" />
+                    </div>
+                    <div class="column cell credit" >
+                      <input class="credit-row-control" type="text" tabindex="-1" size="6" />
+                    </div>
+                    <div class="column cell detail" >
+                      <input class="detail-row-control" type="text" tabindex="-1" size="10" />
+                    </div>
+                    <div class="column cell remove">
+                      <input class="remove-row-control" type="button" name="remove_row" value="-" tabindex="-1" />
+                    </div>
+                    <hr/> <!-- css to clear columns -->
+                  </div>
         
                 </div>
           
