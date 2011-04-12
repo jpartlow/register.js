@@ -28,7 +28,13 @@ function is_instance_of(object, function_ref, message) {
 }
 
 function is_undefined(object, message) {
+  message = message || object + ' should be undefined'
   ok(typeof(object) == 'undefined', message)
+}
+
+function is_null(object, message) {
+  message = message || object + ' should be null'
+  ok(object === null, message)
 }
 
 // deepEqual fails when comparing Prototype Elements

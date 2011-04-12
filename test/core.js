@@ -1,5 +1,19 @@
 Register.debug = true
 
+module("array")
+
+test("sum", function() {
+  is_undefined([].sum())
+  is_undefined([].sum('amount'))
+  equal([1, 2, 3].sum(), 6)
+  equal(['1', '2.5', '3'].sum(), 6.5)
+  equal(['foo', 2, 3].sum(), 5)
+  equal([{ value: 2 }, { value: 5 }, { value: 3}].sum(), 10)
+  equal([{ amount: '1' }, { amount: '2' }, {}].sum('amount'), 3)
+  equal([{ get_amount: function() { return 1 } }, { get_amount: function() { return 4 } }].sum('get_amount'), 5)
+  equal($A([{ get_amount: function() { return '2.5' } }, { get_amount: function() { return 4 } }]).sum('get_amount'), 6.5)
+})
+
 module("register-construction")
 
 test("construct", function() {
@@ -179,7 +193,7 @@ test("initialize", function() {
 test("register-initialization", function() {
   expect(2)
   var ledger = this.register.ledger
-  deepEqual(ledger.config, {})
+  deepEqual(ledger.config, { rows: undefined })
   deepEqual(ledger.rows, [])
 })
 
@@ -346,6 +360,37 @@ test("register-ledger-row-destroy", function() {
   equal(ledger.count(), original_count + 1)
   lr.destroy() 
   equal(ledger.count(), original_count)
+})
+
+test("register-ledger-rows-by-type", function() {
+  expect(4)
+  var register = new Register.Instance(this.gold.edit_payment_register_config())
+  var ledger = register.ledger
+  equal(ledger.rows.length, 3)
+  equal(ledger.purchase_rows().length, 1)
+  equal(ledger.payment_rows().length, 1)
+  equal(ledger.change_rows().length, 1)
+})
+
+test("register-ledger-totals-for-new", function() {
+  expect(5)
+  var ledger = this.register.ledger
+  is_undefined(ledger.get_purchase_total())
+  is_undefined(ledger.get_payment_total())
+  is_undefined(ledger.get_tendered_total())
+  is_undefined(ledger.get_credited_total())
+  is_undefined(ledger.get_change_total())
+})
+
+test("register-ledger-totals-for-existing", function() {
+  expect(5)
+  var register = new Register.Instance(this.gold.edit_payment_register_config())
+  var ledger = register.ledger
+  equal(ledger.get_purchase_total(), 32)
+  equal(ledger.get_payment_total(), 40)
+  equal(ledger.get_tendered_total(), 40)
+  equal(ledger.get_credited_total(), 0)
+  equal(ledger.get_change_total(), 8)
 })
 
 test("register-ui-initialization", function() {
@@ -548,4 +593,13 @@ test("register-ui-payment-type-select-sets-fields", function() {
   py_select.value = py.id
   fireEvent(py_select, 'change')
   equal(ui.get_payment_fields().length, 7)
+})
+
+test("register-ui-totals", function() {
+  expect(4)
+  var ui = this.register.ui
+  equal(ui.total.textContent, '$100.00')
+  equal(ui.tendered.value, '$0.00')
+  equal(ui.credited.textContent,'')
+  equal(ui.change.textContent,'')
 })

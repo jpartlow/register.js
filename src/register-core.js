@@ -150,7 +150,7 @@ Register.Exceptions = {
   generate_exception_type: function(type) {
     var constructor = Register.Exceptions[type] = function(method, msg, macros) {
       macros = macros || {}
-      this.name = name
+      this.name = type 
       this.message = this.name + "." + method + " failed.\n"
       if (msg) {
         this.message = this.message + msg.interpolate(macros) 
@@ -191,7 +191,7 @@ Register.Instance = function(config) {
   this.payment_codes = this.initialize_array_of(Register.Code, this.config.payment_codes)
   this.credit_codes = this.initialize_array_of(Register.Code, this.config.credit_codes)
   this.__generate_code_index()
-  this.ledger = new Register.Ledger(this, this.config.ledger)
+  this.ledger = new Register.Ledger(this, { rows: this.config.ledger })
   this.payment = new Register.Payment(this, this.config.payment)
   this.ui = new Register.UI(this, this.config.template)
 }
@@ -264,7 +264,7 @@ Register.Ledger = function(register, config) {
   this.register = register
   this.config = config || {}
   this.rows = $A()
-  $A(this.config.rows).each(function(row_config) { this.add(row_config) }.bind(this))
+  $A(this.config.rows || []).each(function(row_config) { this.add(row_config) }.bind(this))
 }
 Register.Ledger.inherits(Register.Core)
 Object.extend(Register.Ledger.prototype, {
@@ -277,7 +277,7 @@ Object.extend(Register.Ledger.prototype, {
   // for an existing LedgerRow and tries to instantiate from it.
   add: function(type, code_id, amount) {
     var new_row
-    if (arguments.length == 1 && typeof(arguments[0]) == "Object") {
+    if (arguments.length == 1 && typeof(arguments[0]) == "object") {
       new_row = new Register.LedgerRow(arguments[0]) 
     } else {
       var code = this.register.purchase_codes.lookup(code_id)
@@ -301,6 +301,11 @@ Object.extend(Register.Ledger.prototype, {
     return new_row
   },
 
+  // Add a purchase LedgerRow.
+  add_purchase: function(code_id, amount) { 
+    return this.add(Register.LedgerRow.PURCHASE_TYPE, code_id, amount)
+  },
+
   // Removes the given row from the ledger.
   remove: function(row) {
     this.rows.remove(this.rows.indexOf(row)) 
@@ -314,11 +319,112 @@ Object.extend(Register.Ledger.prototype, {
     }
   },
 
-  // Add a purchase LedgerRow.
-  add_purchase: function(code_id, amount) { 
-    return this.add(Register.LedgerRow.PURCHASE_TYPE, code_id, amount)
+  // Sets the payment Register.Code, resets the associated new payment
+  // Ledger.Row and returns it.  Optionally can override the amount (default is
+  // the new purchase total).  Overridden amounts must be equal to or greater
+  // than the purchase total and must be associated with a cash payment code
+  // type.
+  set_payment_code: function(code_id, amount) {
+    var new_code = this.register.payment_codes.lookup(code_id)
+    if (this.payment_code != new_code) {
+      this.__reset_payment()
+    }
+    return this.payment_row()
   },
 
+  // Initializes the new payment and change row.  (Amount should only be 
+  // given for cash payments.)
+  __reset_payment: function(amount) {
+    if (!this.payment_code) { return undefined }
+    var purchase_amount = get_purchase_total('new')
+    var payment_amount = amount || purchase_amount
+    var change = payment_amount - purchase_amount
+    if (change != 0 && !this.payment_code.is_cash()) { throw(new Register.Exceptions.LedgerException('__reset_payment', "Payment of #{amount} for non cash code #{payment_code} produced non-zero change #{change}", { amount: amount, payment_code: this.payment_code, change: change })) }
+    this.__destroy_payment() 
+    if (payment_amount) {
+      return this.add(Register.LedgerRow.PAYMENT_TYPE, this.payment_code.id, payment_amount)
+    }
+    if (change) {
+      return this.add(Register.LedgerRow.CHANGE_TYPE, this.payment_code.id, change)
+    }
+  },
+
+  __destroy_payment: function() {
+    if (this.payment_row()) { this.payment_row().destroy() }
+    if (this.change_row()) { this.change_row().destroy() }
+  },
+
+  __rows_by_type: function(code_type, config) {
+    config = config || {}
+    var old_or_new = config['old_or_new']
+    return this.rows.select(function(e) { 
+      return e.code_type == code_type && (
+        old_or_new == 'new' ?
+          e.is_new() :
+          old_or_new == 'old' ?
+            !e.is_new() :
+            true // either old or new
+      )
+    })
+  },
+
+  // Get the purchase rows, both old and new.
+  // If you pass 'old' you will get only the old saved rows, if any.
+  // If you pass 'new' you will get only the new unsaved rows.
+  // The default is both.
+  purchase_rows: function(old_or_new) {
+    return this.__rows_by_type('purchase', old_or_new)
+  },
+
+  // Get the payment rows, both old and new.
+  // Same options as purchase_rows.
+  payment_rows: function(old_or_new) {
+    return this.__rows_by_type('payment', old_or_new)
+  },
+
+  // Return the new payment row, if there is one.
+  payment_row: function() {
+    return this.payment_rows('new').first()
+  },
+
+  // Get the change rows, both old and new
+  // Same options as purchase_rows.
+  change_rows: function(old_or_new) {
+    return this.__rows_by_type('change', old_or_new)
+  },
+
+  // Return the new change row, if there is one.
+  change_row: function() {
+    return this.change_rows('new').first()
+  },
+
+  // Total value of purchase ledger entries.
+  // Same options as purchase_rows.
+  get_purchase_total: function(old_or_new) {
+    return this.purchase_rows(old_or_new).sum('get_amount')
+  },
+
+  // Total value of payment ledger entries.
+  get_payment_total: function() {
+    return this.payment_rows().sum('get_amount')
+  },
+
+  // Get the total amount tendered by the customer.
+  get_tendered_total: function() {
+    return this.payment_rows().sum('get_debit')
+  },
+
+  // Get the amount credited to the customer.
+  get_credited_total: function() {
+    var credited_total = this.payment_rows().sum('get_credit')
+    return Object.isUndefined(credited_total) ? undefined : (-1 * credited_total)
+  },
+
+  // Get the change owed to the customer.
+  get_change_total: function() {
+    var change_total = this.change_rows().sum('get_amount')
+    return Object.isUndefined(change_total) ? undefined : (-1 * change_total)
+  },
 })
 
 /////////////////////
@@ -329,7 +435,7 @@ Object.extend(Register.Ledger.prototype, {
 // Config may be an Object of raw ledger entry fields as returned by the server,
 // or code_type, code and amount for new ledger rows.
 //
-// An config object of raw ledger row data should have:
+// A config object of raw ledger row data should have:
 // * id: unique id for the row
 // * type: GL account type (Asset, Liability, Income or Expense)
 // * account_number: GL account number string ('1000.000' for example)
@@ -896,4 +1002,45 @@ Array.prototype.remove = function(from, to) {
   var rest = this.slice((to || from) + 1 || this.length);
   this.length = from < 0 ? this.length + from : from;
   return this.push.apply(this, rest);
-};
+}
+
+// Sums all the elements of an array.
+//
+// If a property is passed, each element is tested for the property.
+//
+// If it exists, and is a function, then it is called and the returned value is added.
+//
+// If it exists, but is not a function, then it is added.
+//
+// Otherwise, the element itself is added.
+//
+// Each value is coerced with parseFloat().  If the result is NaN it
+// is excluded from the sum.
+//
+// (The default property to be tested is 'value' if none is given)
+//
+// The sum of an empty array is undefined.
+//
+// Examples:
+//
+//   [].sum() // => undefined
+//   [1,2,3].sum() // => 6
+//   ['1','2','foo'].sum() // => 3
+//   [{ value: 2 }, { value: 5 }, { value: 3}].sum() // => 10
+//   [{ amount: '1' }, { amount: '2' }, {}].sum('amount') // => 3
+//
+Array.prototype.sum = function(property_name) {
+  if (this.length == 0) { return undefined }
+  property_name = property_name || 'value'
+  return this.inject(0, function(sum, v) {
+    var value
+    var property = v[property_name]
+    switch (typeof(property)) {
+      case 'undefined': value = v; break
+      case 'function': value = v[property_name](); break
+      default: value = property
+    }
+    value = parseFloat(value)
+    return (isNaN(value) ? sum : (sum + value))
+  })
+}
