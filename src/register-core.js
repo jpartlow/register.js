@@ -8,7 +8,7 @@ var Register = {
   // Create a new Register.Instance from config and store it in the
   // Register.registers hash.
   create: function(config) {
-    var register = new Register.Instance(config)
+    var register = new Register.Instance(config).initialize()
     this.registers.set(register.id(), register)
     return register
   },
@@ -23,6 +23,66 @@ Function.prototype.inherits = function(parent_function) {
   this.prototype.parent = parent_function.prototype
   return this
 } 
+
+///////////////////
+// Register.Events
+///////////////////
+
+Register.Events = {
+  // Call this  to provide a new object cloned from Register.Events.Methods with
+  // whatever events were passed as arguments pre initialized.  An interested
+  // object may then extend this, or delegate to it, in order to have event handling.
+  //
+  // Foo = function() { // my foo constructor }
+  // Object.extend(Foo, Register.Events.handler_for('update', 'freak_out'))
+  // f = new Foo()
+  // f.add_listener('freak_out', listening_instance.freak_out_callback_handler)
+  // f.fire('freak_out')
+  // // (listening_instance.freak_out_callback_handler is called...)
+  //
+  handler_for: function() {
+    var event_handler = Object.clone(Register.Events.Methods)
+    event_handler.__events__ = $A(arguments)
+    return event_handler
+  }, 
+}
+// Event handling code to be mixed into any type which wants to allow other objects
+// to listen for events that it broadcasts.
+Register.Events.Methods = {
+
+  _initialize_events: function() {
+    this.__listeners__ = $H({})
+    $A(this.__events__).each(function(a) { 
+      this.__listeners__.set(a, $A([]))
+    }, this)
+  },
+
+  _listeners: function() {
+    if (Object.isUndefined(this.__listeners__)) {
+      this._initialize_events()
+    }
+    return this.__listeners__
+  },
+
+  _get_callbacks: function(event) {
+    var callbacks = this._listeners().get(event)
+    if (!callbacks) { throw(new Register.Exceptions.EventException('_get_callbacks', "Requested callback for unknown event '#{event}'", { event: event })) }
+    return callbacks
+  },
+
+  add_listener: function(event, callback) {
+    return this._get_callbacks(event).push(callback)
+    return this
+  },
+
+  fire: function(event) {
+    this._get_callbacks(event).each(function(callback) {
+      callback(this) 
+    }, this)
+    return true
+  },
+
+}
 
 ///////////////////
 // Register.Core
@@ -147,11 +207,27 @@ Register.Core.prototype = {
 Register.Exceptions = {
   BaseException: function() {},
 
+  generate_stack_trace: function() {
+    var e = new Error()
+    var stack = e.stack
+    if (stack) {
+      stack = stack.split("\n")
+      stack.shift() // top two calls are from the new Error() point above
+      stack.shift() 
+      stack.shift() // third call is from the point where generate_stack_trace() was called
+      stack = stack.join("\n")
+    } else {
+      stack = (e.fileName || '(Unknown)') + ":" + e.lineNumber
+    }
+    return stack
+  },
+
   generate_exception_type: function(type) {
     var constructor = Register.Exceptions[type] = function(method, msg, macros) {
       macros = macros || {}
       this.name = type 
       this.message = this.name + "." + method + " failed.\n"
+      this.stack = Register.Exceptions.generate_stack_trace() 
       if (msg) {
         this.message = this.message + msg.interpolate(macros) 
       }
@@ -163,11 +239,13 @@ Register.Exceptions = {
   MissingElementException: function(selector, element) {
     this.name = "MissingElementException"
     this.message = "Unable to find " + selector + " in " + element
+    this.stack = Register.Exceptions.generate_stack_trace() 
   },
 }  
 Register.Exceptions.generate_exception_type('RegisterException')
 Register.Exceptions.generate_exception_type('LedgerException')
 Register.Exceptions.generate_exception_type('LedgerRowException')
+Register.Exceptions.generate_exception_type('EventException')
 Register.Exceptions.MissingElementException.prototype = new Register.Exceptions.BaseException()
 
 /////////////////////
@@ -200,6 +278,12 @@ Register.Instance.inherits(Register.Core)
 Register.Instance.NEW_MARKER = "__new__"
 // Methods
 Object.extend(Register.Instance.prototype, {
+  // Call this to prepare the instance for use.
+  initialize: function() {
+    this.ui.initialize()
+    return this
+  },
+
   // Payment identifier for this register or Register.Instance.NEW_MARKER if this is for a new payment.
   id: function() {
     return this.payment.id || Register.Instance.NEW_MARKER
@@ -218,6 +302,15 @@ Object.extend(Register.Instance.prototype, {
   // Lookup a purchase, payment, or credit code by unique id.
   find_code: function(code_id) {
     return this.code_index.get(code_id)
+  },
+
+  // Return the cash payment code which should be associated with change.
+  // XXX This relies on the payment_type being 'Cash'
+  change_code: function() {
+    if (!this.__change_code) {
+      this.__change_code = this.payment_codes.find(function(c) { return c.payment_type == 'Cash' })
+    }
+    return this.__change_code
   },
 
   // Creates a Hash to index all of the purchase/payment/credit codes by id.
@@ -258,15 +351,16 @@ Object.extend(Register.Code.prototype, {
 /////////////////////
 
 // The Register.Ledger is the collection of all ledger entries which
-// collectively will make up the accounting transaction being processed by this
+// together will make up the accounting transaction being processed by this
 // payment.
 Register.Ledger = function(register, config) {
   this.register = register
   this.config = config || {}
   this.rows = $A()
-  $A(this.config.rows || []).each(function(row_config) { this.add(row_config) }.bind(this))
+  $A(this.config.rows || []).each(function(row_config) { this.add(row_config) }, this)
 }
 Register.Ledger.inherits(Register.Core)
+Object.extend(Register.Ledger.prototype, Register.Events.handler_for('update'))
 Object.extend(Register.Ledger.prototype, {
   // Number of ledger entries.
   count: function() { return this.rows.length },
@@ -280,7 +374,7 @@ Object.extend(Register.Ledger.prototype, {
     if (arguments.length == 1 && typeof(arguments[0]) == "object") {
       new_row = new Register.LedgerRow(arguments[0]) 
     } else {
-      var code = this.register.purchase_codes.lookup(code_id)
+      var code = this.register.find_code(code_id)
       if (!code) { throw(new Register.Exceptions.LedgerException('add', 'Cannot add a new row to the Ledger without a Register.Code')) }
   
       var debit, credit
@@ -297,7 +391,16 @@ Object.extend(Register.Ledger.prototype, {
       })
     }
     this.rows.push(new_row)
-    this.listen_for_destroy(new_row)
+    if (!new_row.read_only) {
+      // Registers a remove call with the row's 'destroy' listener so that we remove
+      // the row from the ledger array when it is destroyed.
+      new_row.add_listener('destroy', this.remove.bind(this))
+      if (new_row.is_purchase()) { 
+        new_row.add_listener('update', this.update.bind(this))
+      }
+    }
+    // update ledger totals and notify listeners.
+    this.update()
     return new_row
   },
 
@@ -309,48 +412,104 @@ Object.extend(Register.Ledger.prototype, {
   // Removes the given row from the ledger.
   remove: function(row) {
     this.rows.remove(this.rows.indexOf(row)) 
-  },
-
-  // Registers a remove call with the row's 'destroy' listener so that we remove
-  // the row from the ledger when it is destroyed.
-  listen_for_destroy: function(row) {
-    if (!row.read_only) {
-      row.add_listener('destroy', this.remove.bind(this))
+    if (row.is_purchase()) {
+      this.update()
     }
   },
 
+  // Returns amount tendered by the customer, if it has been set, or the 
+  // current new purchase total.
+  get_amount_tendered_or_credited: function() {
+    return this._amount_tendered || this.get_purchase_total('new')
+  },
+
+  // Can be set to override the amount the customer is actually paying,
+  // typically if they pay with more cash than the purchase total and are
+  // therefore due change.
+  set_amount_tendered: function(tendered) {
+    this._amount_tendered = tendered
+    this.update()
+    return this
+  },
+
   // Sets the payment Register.Code, resets the associated new payment
-  // Ledger.Row and returns it.  Optionally can override the amount (default is
-  // the new purchase total).  Overridden amounts must be equal to or greater
-  // than the purchase total and must be associated with a cash payment code
-  // type.
-  set_payment_code: function(code_id, amount) {
-    var new_code = this.register.payment_codes.lookup(code_id)
+  // Ledger.Row and returns it.
+  set_payment_code: function(code_or_code_id) {
+    var new_code = code_or_code_id
+    if (!(code_or_code_id instanceof Register.Code)) {
+      new_code = this.register.payment_codes.lookup(code_or_code_id)
+    }
     if (this.payment_code != new_code) {
-      this.__reset_payment()
+      this.__reset_payment(new_code)
     }
     return this.payment_row()
   },
 
-  // Initializes the new payment and change row.  (Amount should only be 
-  // given for cash payments.)
-  __reset_payment: function(amount) {
-    if (!this.payment_code) { return undefined }
-    var purchase_amount = get_purchase_total('new')
-    var payment_amount = amount || purchase_amount
-    var change = payment_amount - purchase_amount
-    if (change != 0 && !this.payment_code.is_cash()) { throw(new Register.Exceptions.LedgerException('__reset_payment', "Payment of #{amount} for non cash code #{payment_code} produced non-zero change #{change}", { amount: amount, payment_code: this.payment_code, change: change })) }
+  // Recalculates the change row value based on current purchase total less payment.
+  recalculate_change: function() {
+    var change = this.get_payment_total('new') - this.get_purchase_total('new')
+    if (change == 0) {
+      this.__destroy_change()
+    } else {
+      if (!this.change_row()) {
+        if (this.payment_code) {
+          // add (-1 * change) because we are returning Cash, but the code is for payment
+          // and defaults to debit, so we need to flip it to credit
+          this.add(Register.LedgerRow.CHANGE_TYPE, this.register.change_code().id, -1 * change)
+        }
+      } else {
+        this.change_row().set_credit(change)
+      }
+    }
+    return change
+  },
+
+  // Recalculates the payment row value based on current purchase total, or
+  // amount_tendered if that has been set.
+  recalculate_payment: function() {
+    var payment = this.get_amount_tendered_or_credited()
+    if (payment == 0) {
+      this.__destroy_payment()
+    } else {
+      if (!this.payment_row()) {
+        if (this.payment_code) {
+          this.add(Register.LedgerRow.PAYMENT_TYPE, this.payment_code.id, payment)
+        }
+      } else {
+        this.payment_row().set_debit(payment)
+      }
+    }
+  },
+
+  // Update the ledger totals and fire the update event to notify listening objects
+  // like the UI.
+  update: function() {
+    try {
+      if (!this.__updating__) {
+          this.__updating__ = true
+          this.recalculate_payment()
+          this.recalculate_change()
+          this.fire('update')
+      }
+    } finally {
+      this.__updating__ = false
+    }
+    return true
+  },
+
+  // (Re)initializes a new payment row.
+  __reset_payment: function(new_code) {
     this.__destroy_payment() 
-    if (payment_amount) {
-      return this.add(Register.LedgerRow.PAYMENT_TYPE, this.payment_code.id, payment_amount)
-    }
-    if (change) {
-      return this.add(Register.LedgerRow.CHANGE_TYPE, this.payment_code.id, change)
-    }
+    this.payment_code = new_code
+    this.update()
+    return true
   },
 
   __destroy_payment: function() {
     if (this.payment_row()) { this.payment_row().destroy() }
+  },
+
+  __destroy_change: function() {
     if (this.change_row()) { this.change_row().destroy() }
   },
 
@@ -373,13 +532,13 @@ Object.extend(Register.Ledger.prototype, {
   // If you pass 'new' you will get only the new unsaved rows.
   // The default is both.
   purchase_rows: function(old_or_new) {
-    return this.__rows_by_type('purchase', old_or_new)
+    return this.__rows_by_type('purchase', { old_or_new: old_or_new })
   },
 
   // Get the payment rows, both old and new.
   // Same options as purchase_rows.
   payment_rows: function(old_or_new) {
-    return this.__rows_by_type('payment', old_or_new)
+    return this.__rows_by_type('payment', { old_or_new: old_or_new })
   },
 
   // Return the new payment row, if there is one.
@@ -390,7 +549,7 @@ Object.extend(Register.Ledger.prototype, {
   // Get the change rows, both old and new
   // Same options as purchase_rows.
   change_rows: function(old_or_new) {
-    return this.__rows_by_type('change', old_or_new)
+    return this.__rows_by_type('change', { old_or_new: old_or_new })
   },
 
   // Return the new change row, if there is one.
@@ -401,29 +560,28 @@ Object.extend(Register.Ledger.prototype, {
   // Total value of purchase ledger entries.
   // Same options as purchase_rows.
   get_purchase_total: function(old_or_new) {
-    return this.purchase_rows(old_or_new).sum('get_amount')
+    return this.purchase_rows(old_or_new).sum('get_credit_or_debit') || 0
   },
 
   // Total value of payment ledger entries.
-  get_payment_total: function() {
-    return this.payment_rows().sum('get_amount')
+  get_payment_total: function(old_or_new) {
+    return this.payment_rows(old_or_new).sum('get_debit_or_credit') || 0
   },
 
   // Get the total amount tendered by the customer.
-  get_tendered_total: function() {
-    return this.payment_rows().sum('get_debit')
+  get_tendered_total: function(old_or_new) {
+    return this.payment_rows(old_or_new).sum('get_debit') || 0
   },
 
   // Get the amount credited to the customer.
-  get_credited_total: function() {
-    var credited_total = this.payment_rows().sum('get_credit')
-    return Object.isUndefined(credited_total) ? undefined : (-1 * credited_total)
+  get_credited_total: function(old_or_new) {
+    var credited_total = this.payment_rows(old_or_new).sum('get_credit')
+    return Object.isUndefined(credited_total) ? 0 : (-1 * credited_total)
   },
 
   // Get the change owed to the customer.
-  get_change_total: function() {
-    var change_total = this.change_rows().sum('get_amount')
-    return Object.isUndefined(change_total) ? undefined : (-1 * change_total)
+  get_change_total: function(old_or_new) {
+    return this.change_rows(old_or_new).sum('get_credit_or_debit') || 0
   },
 })
 
@@ -436,7 +594,8 @@ Object.extend(Register.Ledger.prototype, {
 // or code_type, code and amount for new ledger rows.
 //
 // A config object of raw ledger row data should have:
-// * id: unique id for the row
+// * id: unique id for the row (only if saved, may be blank if returning from failed
+//   validation...see read_only below)
 // * type: GL account type (Asset, Liability, Income or Expense)
 // * account_number: GL account number string ('1000.000' for example)
 // * account_name: longhand GL account name
@@ -449,10 +608,6 @@ Object.extend(Register.Ledger.prototype, {
 // * credit: credit amount
 // * code_label: the longhand label associated with the Register.Code that generated this row
 // * code_type: purchase, payment or change
-// * read_only: (boolean) Existing ledger rows returned by the server may be
-//   marked read-only if they are ledger entries which have already been
-//   processed.  This is as opposed to unsaved ledger entries returned during
-//   creation of a new payment due to validation errors.
 //
 // NOTE: Only debit or credit should have a value, not both.  
 //
@@ -472,6 +627,13 @@ Object.extend(Register.Ledger.prototype, {
 //
 // Throws Register.Exceptions.LedgerRowException if both debit, credit are set, if amount is 0
 // or not a number, or if the code_type is not one of Register.LedgerRow.TYPES.
+//
+// Properties
+//
+// * read_only: (boolean) Existing ledger rows returned by the server may be
+//   marked read-only if they are ledger entries which have already been
+//   processed (if they have an id).  This is as opposed to unsaved ledger
+//   entries returned during creation of a new payment due to validation errors.
 Register.LedgerRow = function(config) {
   this.config = config || {}
   this.code = this.config.code || {}
@@ -484,12 +646,9 @@ Register.LedgerRow.PAYMENT_TYPE = 'payment'
 Register.LedgerRow.CHANGE_TYPE = 'change'
 Register.LedgerRow.TYPES = $A([Register.LedgerRow.PURCHASE_TYPE, Register.LedgerRow.PAYMENT_TYPE, Register.LedgerRow.CHANGE_TYPE])
 // Methods
+Object.extend(Register.LedgerRow.prototype, Register.Events.handler_for('update', 'destroy'))
 Object.extend(Register.LedgerRow.prototype, {
   initialize: function() {
-    // Hash of arrays of callbacks for various potential events that other components can listen
-    // for using add_listener()
-    this.listeners = $H({ update: $A(), destroy: $A() })
-
     // set defaults from either this.config or this.code if available
     var set_default = function (args) {
       var fields = $A([args]).flatten()
@@ -514,25 +673,20 @@ Object.extend(Register.LedgerRow.prototype, {
       throw(new Register.Exceptions.LedgerRowException('intialize', "Cannot initialize a LedgerRow with both credit (#{credit}) and debit (#{debit}) values.", { credit: this.config.credit, debit: this.config.debit }))
     }
 
-    this.read_only = this.config.read_only || false
     var amount
     if (amount = this.config.debit) { this.set_debit(amount) }
     if (amount = this.config.credit) { this.set_credit(amount) }
     if (this.get_amount() == 0) {
       throw(new Register.Exceptions.LedgerRowException('initialize', "LedgerRow amount must be non-zero"))
     }
-
+    // A row is read-only if it has an id (has been saved on the server)
+    // (must be set /after/ amount is initialized above)
+    this.read_only = this.config.id ? true : false
   },
 
-  add_listener: function(event, callback) {
-    var callbacks = this.listeners.get(event)
-    if (!callbacks) { throw(new Register.Exceptions.LedgerRowException('add_listener', "Requested callback for unknown event '#{event}'\nCallback: #{callback}", { event: event, callback: callback })) }
-    callbacks.push(callback)
-    return this
-  },
-
-  fire: function(event) {
-    $A(this.listeners.get(event)).each(function(callback) { callback(this) })
+  // True if this is a new row which has not yet been saved on the server.
+  is_new: function() {
+    return !this.read_only
   },
 
   get_label: function() {
@@ -583,6 +737,16 @@ Object.extend(Register.LedgerRow.prototype, {
     return amount
   },
 
+  // Returns either credit or negative debit, ignoring the account type, unlike get_amount().
+  get_credit_or_debit: function() {
+    return this.credit || -1 * this.debit || 0
+  },
+
+  // Returns either debit or negative credit, ignoring the account type, unlike get_amount().
+  get_debit_or_credit: function() {
+    return this.debit || -1 * this.credit || 0
+  },
+
   get_detail: function() {
     return this.detail
   },
@@ -590,6 +754,16 @@ Object.extend(Register.LedgerRow.prototype, {
   set_detail: function(value) {
     this.detail = value
     return value
+  },
+
+  // True if the row type is PAYMENT_TYPE.
+  is_payment: function() {
+    return this.code_type == Register.LedgerRow.PAYMENT_TYPE
+  },
+
+  // True if the row type is PURCHASE_TYPE
+  is_purchase: function() {
+    return this.code_type == Register.LedgerRow.PURCHASE_TYPE
   },
 
   // Unless row is read_only, updates the given field with the requested value
@@ -610,6 +784,9 @@ Object.extend(Register.LedgerRow.prototype, {
   },
 
   __set_amount: function(raw_amount, type) {
+    if (this.read_only) {
+      throw( new Register.Exceptions.LedgerRowException('__set_amount', "Attempted to set #{type} to #{amount} for a read only row.", { type: type, amount: raw_amount }))
+    }
     var amount = parseFloat(raw_amount) 
     if (isNaN(amount)) {
       throw( new Register.Exceptions.LedgerRowException('__set_amount', "Attempted to set #{type} but amount #{amount} is not a number.", { type: type, amount: amount }))
@@ -660,14 +837,17 @@ Register.Payment.inherits(Register.Core)
 // Provides the HTML and events for user interaction with the register.
 Register.UI = function(register, template) {
   this.register = register
+  this.ledger = register.ledger
   this.purchase_codes = register.purchase_codes
   this.payment_codes = register.payment_codes
   this.credit_codes = register.credit_codes
   this.template_source = template || ''
-  this.initialize()
 }
 Register.UI.inherits(Register.Core)
 // Constants
+Register.UI.AMOUNT_CREDITED_ID = 'amount-credited'
+Register.UI.AMOUNT_TENDERED_ID = 'amount-tendered'
+Register.UI.CHANGE_DUE_ID = 'change-due'
 Register.UI.LEDGER_ENTRIES_ID = 'ledger-entries'
 Register.UI.LEDGER_ROW_TEMPLATE_ID = 'ledger-entry-row-template'
 Register.UI.PAYMENT_CODES_SELECT_ID = 'payment-type'
@@ -675,8 +855,11 @@ Register.UI.PAYMENT_FIELDS_ID = 'payment-fields'
 Register.UI.PURCHASE_AMOUNT_INPUT_ID = 'purchase-amount'
 Register.UI.PURCHASE_CODES_SELECT_ID = 'purchase-code'
 Register.UI.PURCHASE_CODES_SELECT_BLANK_VALUE = '*Blank*'
+Register.UI.TOTAL_COST_ID = 'total-cost'
 // Methods
 Object.extend(Register.UI.prototype, {
+
+  // Call to prepare UI for interaction with Ledger and user.
   initialize: function() {
     var wrapper = new Element('div').update(this.template_source)
     this.register_template = wrapper.childElements().first()
@@ -689,6 +872,10 @@ Object.extend(Register.UI.prototype, {
       this.ledger_entries = this.locate(Register.UI.LEDGER_ENTRIES_ID)
       this.purchase_amount_input = this.locate(Register.UI.PURCHASE_AMOUNT_INPUT_ID)
       this.payment_fields = this.locate(Register.UI.PAYMENT_FIELDS_ID)
+      this.total = this.locate(Register.UI.TOTAL_COST_ID)
+      this.tendered = this.locate(Register.UI.AMOUNT_TENDERED_ID)
+      this.credited = this.locate(Register.UI.AMOUNT_CREDITED_ID)
+      this.change = this.locate(Register.UI.CHANGE_DUE_ID)
       // populate select controls with codes
       this.purchase_codes_select = this.locate(Register.UI.PURCHASE_CODES_SELECT_ID)
       this.update_from_array(this.purchase_codes_select, this.make_options(this.purchase_codes, 'id', 'label', { value: Register.UI.PURCHASE_CODES_SELECT_BLANK_VALUE, label: '- Select a code -' }))
@@ -699,9 +886,24 @@ Object.extend(Register.UI.prototype, {
       this.initialize_register_callbacks()
       // set the register's title header
       this.set_title()
+      this.ledger.add_listener('update', this.update.bind(this))
       // set visible payment fields
-      this.setup_payment_type_fields()
+      // set ledger payment code to first available
+      this.handle_payment_code_select()
     }
+    return this
+  },
+
+  // Reset total amounts based on current ledger.
+  update: function() {
+    this.total.update(this.monetize(this.ledger.get_purchase_total(), true))
+    this.tendered.ledger_value = this.ledger.get_tendered_total()
+    this.tendered.value = (this.monetize(this.tendered.ledger_value, true))
+    this.credited.ledger_value = this.ledger.get_credited_total()
+    this.credited.update(this.monetize(this.credited.ledger_value, true))
+    this.change.update(this.monetize(this.ledger.get_change_total(), true))
+    this.tendered.ledger_value == 0 ? this.tendered.hide() : this.tendered.show()
+    this.credited.ledger_value == 0 ? this.credited.hide() : this.credited.show()
   },
 
   // Returns an Array of the visible payment fields.
@@ -801,7 +1003,13 @@ Object.extend(Register.UI.prototype, {
 
   // Callback for user changing the payment type.
   handle_payment_code_select: function(evnt) {
-    this.setup_payment_type_fields() 
+    this.setup_payment_type_fields()
+    this.ledger.set_payment_code(this.get_payment_code())
+  },
+
+  // Callback for user changing the amount tendered.
+  handle_amount_tendered_input: function(evnt) {
+    this.ledger.set_amount_tendered(this.tendered.value)
   },
 
   // Initializes callback functions on user controls in the current root register ui.
@@ -818,6 +1026,12 @@ Object.extend(Register.UI.prototype, {
   initialize_register_callbacks: function() {
     this.initialize_purchase_code_controls()
     this.initialize_payment_code_controls()     
+    this.initialize_amount_tendered_control()
+  },
+
+  // Attaches onchange callback to UI amount-tendered input to update the ledger.
+  initialize_amount_tendered_control: function() {
+    this.tendered.observe('change', this.handle_amount_tendered_input.bind(this))
   },
 
   // Attaches onchange callback to UI purchase-code select to add new ledger rows.
@@ -940,7 +1154,7 @@ Object.extend(Register.UI.Row.prototype, {
     this.remove.observe('click', this.handle_remove.bind(this))
     $A(['credit', 'debit', 'detail']).each(function(control) {
       this[control].observe('change', this.handle_update)
-    }.bind(this))
+    }, this)
   },
 
   handle_remove: function(evnt) {

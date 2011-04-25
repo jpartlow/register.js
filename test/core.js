@@ -207,6 +207,12 @@ test("register-find-code", function() {
   deepEqual(this.register.find_code(cr.id), new Register.Code(cr))
 })
 
+test("register-change-code", function() {
+  expect(1)
+  var change_code = this.gold.payment_codes[0]
+  deepEqual(this.register.change_code(), new Register.Code(change_code))
+})
+
 test("register-ledger-count", function() {
   expect(1)
   var ledger = this.register.ledger
@@ -375,11 +381,11 @@ test("register-ledger-rows-by-type", function() {
 test("register-ledger-totals-for-new", function() {
   expect(5)
   var ledger = this.register.ledger
-  is_undefined(ledger.get_purchase_total())
-  is_undefined(ledger.get_payment_total())
-  is_undefined(ledger.get_tendered_total())
-  is_undefined(ledger.get_credited_total())
-  is_undefined(ledger.get_change_total())
+  equal(ledger.get_purchase_total(), 0)
+  equal(ledger.get_payment_total(), 0)
+  equal(ledger.get_tendered_total(), 0)
+  equal(ledger.get_credited_total(), 0)
+  equal(ledger.get_change_total(), 0)
 })
 
 test("register-ledger-totals-for-existing", function() {
@@ -393,9 +399,59 @@ test("register-ledger-totals-for-existing", function() {
   equal(ledger.get_change_total(), 8)
 })
 
+test("register-ledger-set-payment-code", function() {
+  expect(17)
+  var ledger = this.register.ledger
+  var pc = this.gold.purchase_codes[0]
+  var py = this.gold.payment_codes[0]
+  var py2 = this.gold.payment_codes[1]
+
+  is_undefined(ledger.payment_row())
+  is_undefined(ledger.payment_code)
+
+  ledger.set_payment_code(py.id)
+  equal(ledger.payment_code.id, py.id)
+  is_undefined(ledger.payment_row())
+
+  ledger.add_purchase(pc.id, 100)
+
+  ok(ledger.payment_row())
+  equal(ledger.payment_row().code.id, py.id)
+  equal(ledger.payment_rows().length, 1)
+  equal(ledger.change_rows().length, 0)
+  equal(ledger.get_purchase_total(), 100)
+  equal(ledger.get_payment_total(), 100)
+  equal(ledger.get_change_total(), 0)
+
+  ledger.set_payment_code(py2.id)
+  equal(ledger.payment_row().code.id, py2.id)
+  equal(ledger.payment_rows().length, 1)
+  equal(ledger.change_rows().length, 0)
+  equal(ledger.get_purchase_total(), 100)
+  equal(ledger.get_payment_total(), 100)
+  equal(ledger.get_change_total(), 0)
+})
+ 
+test("register-ledger-payment-updates-change", function() {
+  expect(6)
+  var ledger = this.register.ledger
+  var pc = this.gold.purchase_codes[0]
+  var py = this.gold.payment_codes[0]
+  is_undefined(ledger.payment_row())
+  ledger.add_purchase(pc.id, 100)
+  ledger.set_payment_code(py.id)
+  is_undefined(ledger.change_row())
+
+  ledger.set_amount_tendered(150)
+  equal(ledger.change_rows().length, 1)
+  equal(ledger.get_purchase_total(), 100)
+  equal(ledger.get_payment_total(), 150)
+  equal(ledger.get_change_total(), 50)
+})
+
 test("register-ui-initialization", function() {
   expect(9)
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   is_instance_of(ui, Register.UI)
   strictEqual(ui.template_source, this.gold.template)
   is_instance_of(ui.register_template, Element, 'ui should initialize a template register element')
@@ -410,7 +466,7 @@ test("register-ui-initialization", function() {
 
 test("register-ui-delegation", function() {
   expect(3)
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   strictEqual(ui.purchase_codes, this.register.purchase_codes)
   strictEqual(ui.payment_codes, this.register.payment_codes)
   strictEqual(ui.credit_codes, this.register.credit_codes)
@@ -418,7 +474,7 @@ test("register-ui-delegation", function() {
 
 test("register-ui-make-options", function() {
   expect(17)
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   var pc = this.gold.purchase_codes
   var ex =  [ 
     new Element('option', { value: pc[0].id }).update(pc[0].label),
@@ -433,7 +489,7 @@ test("register-ui-make-options", function() {
 
 test("register-ui-select-options", function() {
   expect(2)
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   var pc = this.gold.purchase_codes
   var py = this.gold.payment_codes
 
@@ -448,7 +504,7 @@ test("register-ui-select-options", function() {
 
 test("register-ui-initialize-purchase-code", function() {
   expect(5)
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   var pc = ui.purchase_codes_select
   var original_ui_row_count = ui.rows.length
   var fired = false
@@ -458,11 +514,11 @@ test("register-ui-initialize-purchase-code", function() {
   ui.purchase_amount_input.value = '100'
   fireEvent(pc, 'change')
   equal(fired, false)
-  ui.purchase_codes_select.value = '1'
+  pc.value = '1'
   fireEvent(pc, 'change')
   equal(fired, false)
   ui.purchase_amount_input.value = '100'
-  ui.purchase_codes_select.value = '1'
+  pc.value = '1'
   fireEvent(pc, 'change')
   equal(fired, true)
   equal(ui.rows.length, original_ui_row_count + 1)
@@ -470,18 +526,18 @@ test("register-ui-initialize-purchase-code", function() {
 
 test("register-ui-add-ledger-row", function() {
   expect(2)
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   var ledger = this.register.ledger
   var original_ledger_count = ledger.count() 
   var original_ui_row_count = ui.rows.length
   ui.add_ledger_row('1','40')
-  equal(ledger.count(), original_ledger_count + 1)
+  equal(ledger.count(), original_ledger_count + 2, "purchase row and payment row")
   equal(ui.rows.length, original_ui_row_count + 1)
 })
 
 test("register-ui-row-enable-disable", function() {
   expect(5)
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   var pc = this.gold.purchase_codes[0]
   ui_lr = ui.add_ledger_row(pc.id, '50')
   equal(pc.debit_or_credit, "C")
@@ -496,7 +552,7 @@ test("register-ui-row-enable-disable", function() {
 
 test("register-ui-row-enable-disable-after-amount-flips", function() {
   expect(4)
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   var pc = this.gold.purchase_codes[0]
   ui_lr = ui.add_ledger_row(pc.id, '50')
   equal(pc.debit_or_credit, "C")
@@ -513,7 +569,7 @@ test("register-ui-row-enable-disable-after-amount-flips", function() {
 
 test("register-ui-row-values", function() {
   expect(4)
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   var pc = this.gold.purchase_codes[0]
   ui_lr = ui.add_ledger_row(pc.id, '50')
   equal(ui_lr.label.textContent, pc.label)
@@ -524,7 +580,7 @@ test("register-ui-row-values", function() {
 
 test("register-ui-row-change-updates-ledger-row", function() {
   expect(6)
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   var pc = this.gold.purchase_codes[0]
   ui_lr = ui.add_ledger_row(pc.id, '50')
   lr = ui_lr.ledger_row
@@ -546,7 +602,7 @@ test("register-ui-row-change-updates-ledger-row", function() {
 
 test("register-ui-row-set-to-zero-destroys", function() {
   expect(2)
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   var ledger = this.register.ledger
   var pc = this.gold.purchase_codes[0]
   ui_lr = ui.add_ledger_row(pc.id, '50')
@@ -554,13 +610,13 @@ test("register-ui-row-set-to-zero-destroys", function() {
   var ui_row_count = ui.rows.length
   ui_lr.credit.value = '0'
   fireEvent(ui_lr.credit, 'change')
-  equal(ledger.count(), ledger_row_count - 1)
+  equal(ledger.count(), ledger_row_count - 2, "clears purchase and payment row")
   equal(ui.rows.length, ui_row_count - 1)
 })
 
 test("register-ui-sets-title", function() {
   expect(1)
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   equal(ui.root.down('.title').textContent, 'New Payment')
 })
 
@@ -568,7 +624,7 @@ test("register-ui-get-payment-type", function() {
   expect(2)
   var py = this.gold.payment_codes[0]
   var py2 = this.gold.payment_codes[1]
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   equal(ui.get_payment_type(), py.payment_type)
   ui.payment_codes_select.value = py2.id
   equal(ui.get_payment_type(), py2.payment_type)
@@ -577,7 +633,7 @@ test("register-ui-get-payment-type", function() {
 test("register-ui-sets-payment-fields", function() {
   expect(2)
   var py = this.gold.payment_codes[1]
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   equal(ui.get_payment_fields().length, 6)
   ui.payment_codes_select.value = py.id
   ui.setup_payment_type_fields()
@@ -587,7 +643,7 @@ test("register-ui-sets-payment-fields", function() {
 test("register-ui-payment-type-select-sets-fields", function() {
   expect(2)
   var py = this.gold.payment_codes[1]
-  var ui = this.register.ui
+  var ui = this.register.ui.initialize()
   var py_select = ui.payment_codes_select
   equal(ui.get_payment_fields().length, 6)
   py_select.value = py.id
@@ -595,11 +651,140 @@ test("register-ui-payment-type-select-sets-fields", function() {
   equal(ui.get_payment_fields().length, 7)
 })
 
+test("register-ui-sets-payment-code-default", function() {
+  expect(1)
+  var py = this.gold.payment_codes[0]
+  var ui = this.register.ui.initialize()
+  equal(ui.ledger.payment_code.id, py.id)
+})
+
 test("register-ui-totals", function() {
   expect(4)
-  var ui = this.register.ui
-  equal(ui.total.textContent, '$100.00')
+  var ui = this.register.ui.initialize()
+  equal(ui.total.textContent, '$0.00')
   equal(ui.tendered.value, '$0.00')
-  equal(ui.credited.textContent,'')
-  equal(ui.change.textContent,'')
+  equal(ui.credited.textContent,'$0.00')
+  equal(ui.change.textContent,'$0.00')
+})
+
+test("register-ui-adding-purchase-row-updates-totals", function() {
+  expect(9)
+  var ui = this.register.ui.initialize()
+  var pc = ui.purchase_codes_select
+  var am = ui.purchase_amount_input
+  equal(ui.total.textContent, '$0.00')
+  equal(ui.tendered.value, '$0.00')
+  equal(ui.credited.textContent, '$0.00')
+  equal(ui.change.textContent, '$0.00')
+  am.value = '100'
+  pc.value = '1'
+  fireEvent(pc, 'change')
+  equal(ui.total.textContent, '$100.00')
+  equal(ui.tendered.value, '$100.00')
+  ok(!ui.credited.visible())
+  equal(ui.credited.textContent, '$0.00')
+  equal(ui.change.textContent, '$0.00')
+})
+
+test("register-ui-changing-amount-tendered-updates-totals", function() {
+  expect(15)
+  var ui = this.register.ui.initialize()
+  var pc = ui.purchase_codes_select
+  var am = ui.purchase_amount_input
+  am.value = '100'
+  pc.value = '1'
+  fireEvent(pc, 'change')
+  equal(ui.total.textContent, '$100.00')
+  equal(ui.tendered.value, '$100.00')
+  ok(!ui.credited.visible())
+  equal(ui.credited.textContent, '$0.00')
+  equal(ui.change.textContent, '$0.00')
+
+  ui.tendered.value = '50'
+  fireEvent(ui.tendered, 'change')
+  equal(ui.total.textContent, '$100.00')
+  equal(ui.tendered.value, '$50.00')
+  ok(!ui.credited.visible())
+  equal(ui.credited.textContent, '$0.00')
+  equal(ui.change.textContent, '$-50.00')
+
+  ui.tendered.value = '150'
+  fireEvent(ui.tendered, 'change')
+  equal(ui.total.textContent, '$100.00')
+  equal(ui.tendered.value, '$150.00')
+  ok(!ui.credited.visible())
+  equal(ui.credited.textContent, '$0.00')
+  equal(ui.change.textContent, '$50.00')
+})
+
+test("register-ui-updating-purchase-row-updates-totals", function() {
+  expect(10)
+  var ui = this.register.ui.initialize()
+  var pc = ui.purchase_codes_select
+  var am = ui.purchase_amount_input
+  am.value = '100'
+  pc.value = '1'
+  fireEvent(pc, 'change')
+  equal(ui.total.textContent, '$100.00')
+  equal(ui.tendered.value, '$100.00')
+  ok(!ui.credited.visible())
+  equal(ui.credited.textContent, '$0.00')
+  equal(ui.change.textContent, '$0.00')
+
+  var lr = ui.rows.first()
+  lr.credit.value = '50'
+  fireEvent(lr.credit, 'change')  
+  equal(ui.total.textContent, '$50.00')
+  equal(ui.tendered.value, '$50.00')
+  ok(!ui.credited.visible())
+  equal(ui.credited.textContent, '$0.00')
+  equal(ui.change.textContent, '$0.00')
+})
+
+test("register-ui-deleting-purchase-row-updates-totals", function() {
+  expect(11)
+  var ui = this.register.ui.initialize()
+  var pc = ui.purchase_codes_select
+  var am = ui.purchase_amount_input
+  am.value = '100'
+  pc.value = '1'
+  fireEvent(pc, 'change')
+  equal(ui.total.textContent, '$100.00')
+  equal(ui.tendered.value, '$100.00')
+  ok(!ui.credited.visible())
+  equal(ui.credited.textContent, '$0.00')
+  equal(ui.change.textContent, '$0.00')
+
+  var lr = ui.rows.first()
+  fireEvent(lr.remove, 'click')  
+  equal(ui.total.textContent, '$0.00')
+  equal(ui.tendered.value, '$0.00')
+  ok(!ui.credited.visible())
+  ok(!ui.tendered.visible())
+  equal(ui.credited.textContent, '$0.00')
+  equal(ui.change.textContent, '$0.00')
+})
+
+test("register-ui-credit-totals", function() {
+  expect(10)
+  var ui = this.register.ui.initialize()
+  var pc = ui.purchase_codes_select
+  var am = ui.purchase_amount_input
+  am.value = '100'
+  pc.value = '1'
+  fireEvent(pc, 'change')
+  equal(ui.total.textContent, '$100.00')
+  equal(ui.tendered.value, '$100.00')
+  ok(!ui.credited.visible())
+  equal(ui.credited.textContent, '$0.00')
+  equal(ui.change.textContent, '$0.00')
+
+  var lr = ui.rows.first()
+  lr.credit.value = -50
+  fireEvent(lr.credit, 'change')  
+  equal(ui.total.textContent, '$-50.00')
+  equal(ui.tendered.value, '$0.00')
+  ok(!ui.tendered.visible())
+  equal(ui.credited.textContent, '$50.00')
+  equal(ui.change.textContent, '$0.00')
 })
