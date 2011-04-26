@@ -427,7 +427,8 @@ Object.extend(Register.Ledger.prototype, {
   // typically if they pay with more cash than the purchase total and are
   // therefore due change.
   set_amount_tendered: function(tendered) {
-    this._amount_tendered = tendered
+    var amount_tendered = parseFloat(tendered)
+    this._amount_tendered = isNaN(amount_tendered) ? undefined : amount_tendered
     this.update()
     return this
   },
@@ -569,14 +570,15 @@ Object.extend(Register.Ledger.prototype, {
   },
 
   // Get the total amount tendered by the customer.
+  // (This will always be positive)
   get_tendered_total: function(old_or_new) {
     return this.payment_rows(old_or_new).sum('get_debit') || 0
   },
 
-  // Get the amount credited to the customer.
+  // Get the total amount credited back to the customer.
+  // (This will always be positive)
   get_credited_total: function(old_or_new) {
-    var credited_total = this.payment_rows(old_or_new).sum('get_credit')
-    return Object.isUndefined(credited_total) ? 0 : (-1 * credited_total)
+    return this.payment_rows(old_or_new).sum('get_credit') || 0
   },
 
   // Get the change owed to the customer.
@@ -846,7 +848,9 @@ Register.UI = function(register, template) {
 Register.UI.inherits(Register.Core)
 // Constants
 Register.UI.AMOUNT_CREDITED_ID = 'amount-credited'
+Register.UI.AMOUNT_CREDITED_ROW_SELECTOR = '.amount-credited.row'
 Register.UI.AMOUNT_TENDERED_ID = 'amount-tendered'
+Register.UI.AMOUNT_TENDERED_ROW_SELECTOR = '.amount-tendered.row'
 Register.UI.CHANGE_DUE_ID = 'change-due'
 Register.UI.LEDGER_ENTRIES_ID = 'ledger-entries'
 Register.UI.LEDGER_ROW_TEMPLATE_ID = 'ledger-entry-row-template'
@@ -874,7 +878,9 @@ Object.extend(Register.UI.prototype, {
       this.payment_fields = this.locate(Register.UI.PAYMENT_FIELDS_ID)
       this.total = this.locate(Register.UI.TOTAL_COST_ID)
       this.tendered = this.locate(Register.UI.AMOUNT_TENDERED_ID)
+      this.tendered_row = this.locate(Register.UI.AMOUNT_TENDERED_ROW_SELECTOR)
       this.credited = this.locate(Register.UI.AMOUNT_CREDITED_ID)
+      this.credited_row = this.locate(Register.UI.AMOUNT_CREDITED_ROW_SELECTOR)
       this.change = this.locate(Register.UI.CHANGE_DUE_ID)
       // populate select controls with codes
       this.purchase_codes_select = this.locate(Register.UI.PURCHASE_CODES_SELECT_ID)
@@ -902,8 +908,8 @@ Object.extend(Register.UI.prototype, {
     this.credited.ledger_value = this.ledger.get_credited_total()
     this.credited.update(this.monetize(this.credited.ledger_value, true))
     this.change.update(this.monetize(this.ledger.get_change_total(), true))
-    this.tendered.ledger_value == 0 ? this.tendered.hide() : this.tendered.show()
-    this.credited.ledger_value == 0 ? this.credited.hide() : this.credited.show()
+    this.tendered.ledger_value == 0 ? this.tendered_row.hide() : this.tendered_row.show()
+    this.credited.ledger_value == 0 ? this.credited_row.hide() : this.credited_row.show()
   },
 
   // Returns an Array of the visible payment fields.
