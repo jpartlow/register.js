@@ -667,6 +667,17 @@ test("register-ui-payment-type-select-sets-fields", function() {
   equal(ui.get_payment_fields().length, 7)
 })
 
+test("register-ui-payment-type-select-sets-submission-controls", function() {
+  expect(2)
+  var py = this.gold.credit_card_code
+  var ui = this.register.ui.initialize()
+  var py_select = ui.payment_codes_select
+  equal(ui.get_submission_controls().length, 1)
+  py_select.value = py.id
+  fireEvent(py_select, 'change')
+  equal(ui.get_submission_controls().length, 3)
+})
+
 test("register-ui-sets-payment-code-default", function() {
   expect(1)
   var py = this.gold.payment_codes[0]
@@ -803,4 +814,11 @@ test("register-ui-credit-totals", function() {
   ok(!ui.tendered_row.visible())
   equal(ui.credited.textContent, '$50.00')
   equal(ui.change.textContent, '$0.00')
+})
+
+test("register-ui-submit", function() {
+  expect(5)
+  var ui = this.register.ui.initialize()
+  fireEvent(ui.root, 'submit')
+  ok(false)
 })

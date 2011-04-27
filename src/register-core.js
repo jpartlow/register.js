@@ -851,6 +851,7 @@ Register.UI.AMOUNT_CREDITED_ID = 'amount-credited'
 Register.UI.AMOUNT_CREDITED_ROW_SELECTOR = '.amount-credited.row'
 Register.UI.AMOUNT_TENDERED_ID = 'amount-tendered'
 Register.UI.AMOUNT_TENDERED_ROW_SELECTOR = '.amount-tendered.row'
+Register.UI.CANCEL_CONTROL_SELECTOR = '.cancel-control a'
 Register.UI.CHANGE_DUE_ID = 'change-due'
 Register.UI.LEDGER_ENTRIES_ID = 'ledger-entries'
 Register.UI.LEDGER_ROW_TEMPLATE_ID = 'ledger-entry-row-template'
@@ -859,6 +860,7 @@ Register.UI.PAYMENT_FIELDS_ID = 'payment-fields'
 Register.UI.PURCHASE_AMOUNT_INPUT_ID = 'purchase-amount'
 Register.UI.PURCHASE_CODES_SELECT_ID = 'purchase-code'
 Register.UI.PURCHASE_CODES_SELECT_BLANK_VALUE = '*Blank*'
+Register.UI.SUBMISSION_CONTROLS_ID = 'submission-controls'
 Register.UI.TOTAL_COST_ID = 'total-cost'
 // Methods
 Object.extend(Register.UI.prototype, {
@@ -882,6 +884,8 @@ Object.extend(Register.UI.prototype, {
       this.credited = this.locate(Register.UI.AMOUNT_CREDITED_ID)
       this.credited_row = this.locate(Register.UI.AMOUNT_CREDITED_ROW_SELECTOR)
       this.change = this.locate(Register.UI.CHANGE_DUE_ID)
+      this.submission_controls = this.locate(Register.UI.SUBMISSION_CONTROLS_ID)
+      this.cancel_control = this.locate(Register.UI.CANCEL_CONTROL_SELECTOR)
       // populate select controls with codes
       this.purchase_codes_select = this.locate(Register.UI.PURCHASE_CODES_SELECT_ID)
       this.update_from_array(this.purchase_codes_select, this.make_options(this.purchase_codes, 'id', 'label', { value: Register.UI.PURCHASE_CODES_SELECT_BLANK_VALUE, label: '- Select a code -' }))
@@ -919,6 +923,13 @@ Object.extend(Register.UI.prototype, {
     })
   },
 
+  // Returns an Array of the enabled submission controls.
+  get_submission_controls: function(all) {
+    return this.submission_controls.select('input').findAll(function(e) {
+      return all ? true : !e.disabled
+    })
+  },
+
   // Returns the payment code object associated with the currently selected payment type.
   get_payment_code: function() {
     return this.register.find_code(this.payment_codes_select.value)
@@ -934,11 +945,11 @@ Object.extend(Register.UI.prototype, {
   // currently selected payment type.
   setup_payment_type_fields: function() {
     var payment_type = this.get_payment_type()
-    this.payment_fields.select('.show-by-type').each(function(e) {
+    this.root.select('.show-by-type').each(function(e) {
       e.hide()
       e.select('input','select','textarea').invoke('disable')
     })
-    this.payment_fields.select('.show-by-type.' + payment_type).each(function(e) {
+    this.root.select('.show-by-type.' + payment_type).each(function(e) {
       e.select('input','select','textarea').invoke('enable')
       e.show()
     })
@@ -1018,13 +1029,19 @@ Object.extend(Register.UI.prototype, {
     this.ledger.set_amount_tendered(this.tendered.value)
   },
 
+  // Callback for user clicking the cancel control.
+  handle_cancel_control_click: function(evnt) {
+    throw('implement me')
+  },
+
+  handle_submit_control_submission: function(evnt) {
+    throw('implement me')
+  },
+
   // Initializes callback functions on user controls in the current root register ui.
   // * purchase-code select - on change create a ledger row, update totals
   // * payment-type select - on change update register payment state and hide/show
   //   correct payment fields.
-  // * ledger row value - on change flip credit/debit if switch from positive to negative,
-  //   delete if zero, update totals
-  // * ledger row remove - on click remove ledger row, update totals
   // * amount-tendered - on change update totals
   // * card swipe - key logger to detect and handle card swipe
   // * tabbing - keep tab cycle within register
@@ -1033,6 +1050,7 @@ Object.extend(Register.UI.prototype, {
     this.initialize_purchase_code_controls()
     this.initialize_payment_code_controls()     
     this.initialize_amount_tendered_control()
+    this.initialize_submission_controls()
   },
 
   // Attaches onchange callback to UI amount-tendered input to update the ledger.
@@ -1049,6 +1067,15 @@ Object.extend(Register.UI.prototype, {
   // show/hide associated fields.
   initialize_payment_code_controls: function() {
     this.payment_codes_select.observe('change', this.handle_payment_code_select.bind(this))
+  },
+  
+  // Attaches onsubmit callback to UI submission controls, and an onclick callback
+  // for cancel control.
+  initialize_submission_controls: function() {
+    this.cancel_control.observe('click', this.handle_cancel_control_click.bind(this))
+    this.get_submission_controls(true).each(function(submit) {
+      submit.observe('submit', this.handle_submit_control_submission.bind(this)) 
+    }, this)
   },
 })
 
@@ -1156,6 +1183,9 @@ Object.extend(Register.UI.Row.prototype, {
   },
 
   // Setup the event callbacks for the row's controls.
+  // * ledger row value - on change flip credit/debit if switch from positive to negative,
+  //   delete if zero, update totals
+  // * ledger row remove - on click remove ledger row, update totals
   initialize_callbacks: function() {
     this.remove.observe('click', this.handle_remove.bind(this))
     $A(['credit', 'debit', 'detail']).each(function(control) {

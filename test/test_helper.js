@@ -155,11 +155,24 @@ function GoldData() {
       debit_or_credit: "D",
       allow_detail: false,
     },
-  ] 
+    {
+      id: 6,
+      code: "CCT",
+      label: "Credit Card",
+      account_number: "1900.000",
+      account_name: "Undeposited Funds",
+      payment_type: "CreditCard",
+      account_type: "Asset",
+      debit_or_credit: "D",
+      allow_detail: false,
+    },
+  ]
+
+  this.credit_card_code = this.payment_codes[3]
 
   this.credit_codes = [
     {
-      id: 6,
+      id: 7,
       code: "CVTC",
       label: "Issue Credit Voucher",
       account_number: "2251.000",
@@ -170,7 +183,7 @@ function GoldData() {
       allow_detail: false,
     },
     {
-      id: 7,
+      id: 8,
       code: "GCTC",
       label: "Gift Certificate Credit",
       account_number: "2250.000",
