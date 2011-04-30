@@ -12,6 +12,13 @@ var Register = {
     this.registers.set(register.id(), register)
     return register
   },
+
+  // Remove the given Register.Instance from the Register.registers hash
+  // and delete it.
+  destroy: function(instance) {
+    if (instance.root()) { instance.root().remove() }
+    this.registers.unset(instance.id())
+  },
 }
 
 //////////////////////
@@ -97,8 +104,10 @@ Register.Core.prototype = {
   //
   // The returned Prototype Array is extended with a lookup() function to assist
   // with finding elements by their 'id' property.
-  initialize_array_of: function(element_function, config_array) {
-    var array = $A(config_array).map(function(config) { return new element_function.prototype.constructor(config) } )
+  initialize_array_of: function(element_function, config_array, config_overrides) {
+    var array = $A(config_array).map(function(config) { 
+      return new element_function.prototype.constructor(config, config_overrides) 
+    })
     Object.extend(array, {
       lookup: function(key) {
         if (Object.isUndefined(this.__index)) {
@@ -258,6 +267,7 @@ Register.Exceptions.MissingElementException.prototype = new Register.Exceptions.
 //
 // * purchase_codes : Array of raw purchase Code data
 // * payment_codes : Array of raw payment Code data
+// * adjustment_codes : Array of raw adjustment Code data
 // * credit_codes : Array of raw credit Code data
 // * ledger : Array of raw LedgerRow data
 // * payment : Object of raw Payment data
@@ -265,9 +275,10 @@ Register.Exceptions.MissingElementException.prototype = new Register.Exceptions.
 //
 Register.Instance = function(config) {
   this.config = config || {}
-  this.purchase_codes = this.initialize_array_of(Register.Code, this.config.purchase_codes)
-  this.payment_codes = this.initialize_array_of(Register.Code, this.config.payment_codes)
-  this.credit_codes = this.initialize_array_of(Register.Code, this.config.credit_codes)
+  this.purchase_codes = this.initialize_array_of(Register.PurchaseCode, this.config.purchase_codes)
+  this.payment_codes = this.initialize_array_of(Register.PaymentCode, this.config.payment_codes)
+  this.adjustment_codes = this.initialize_array_of(Register.AdjustmentCode, this.config.adjustment_codes)
+  this.credit_codes = this.initialize_array_of(Register.CreditCode, this.config.credit_codes)
   this.__generate_code_index()
   this.ledger = new Register.Ledger(this, { rows: this.config.ledger })
   this.payment = new Register.Payment(this, this.config.payment)
@@ -313,11 +324,40 @@ Object.extend(Register.Instance.prototype, {
     return this.__change_code
   },
 
+  // Override to hook into the Register's cancel cycle.
+  on_cancel: function() { return true },
+
+  cancel: function() {
+    if (this.on_cancel()) {
+      Register.destroy(this)
+      return true
+    }
+    return false
+  },
+
+  // Override to hook into the Register's submit cycle,
+  on_submit: function(serialized_form) { return true },
+
+  submit: function() {
+    var serialized = this.serialize()
+    if (this.on_submit(serialized)) {
+      return true
+    }
+    return false
+  },
+
+  // Return an object with properties for all of the ledger, payment and form data.
+  serialize: function() {
+    var serialized = this.ui.serialize()
+    serialized['payment[ledger_entries]'] = this.ledger.serialize()
+    return serialized
+  },
+
   // Creates a Hash to index all of the purchase/payment/credit codes by id.
   // Will throw a RegisterException if two codes have the same id.
   __generate_code_index: function() {
     this.code_index = $H()
-    var codes = $A([this.purchase_codes, this.payment_codes, this.credit_codes]).flatten().compact()
+    var codes = $A([this.purchase_codes, this.payment_codes, this.adjustment_codes, this.credit_codes]).flatten().compact()
     codes.inject(this.code_index, function(index, code) {
       index.set(code.id, code)
       return index  
@@ -336,15 +376,41 @@ Object.extend(Register.Instance.prototype, {
 // A Register.Code represents one code that a user of the register would
 // use to code a particular purchase, payment or credit line item.
 Register.Code = function(config) {
-  this.config = config || {}
-  var configure = function(field) {
-    this[field] = this.config[field]
-  }.bind(this)
-  $A(['id', 'code', 'label', 'account_number', 'account_name', 'fee_types', 'account_type', 'debit_or_credit','payment_type']).each(configure)
+  this.initialize(config)
 }
+// Methods
 Register.Code.inherits(Register.Core)
 Object.extend(Register.Code.prototype, {
+  initialize: function(config) {
+    this.config = config || {}
+    var configure = function(field) {
+      this[field] = this.config[field]
+    }.bind(this)
+    $A(['id', 'code', 'label', 'account_number', 'account_name', 'fee_types', 'account_type', 'debit_or_credit','payment_type', 'allows_change']).each(configure)
+    return this
+  },
+
+  // XXX Relies on payment_type == 'Check'
+  is_check: function() {
+    return this.payment_type == 'Check'
+  },
+
+  // XXX Relies on payment_type == 'CreditCard'
+  is_credit_card: function() {
+    return this.payment_type == 'CreditCard'
+  },
 })
+// Subtypes
+Register.PurchaseCode = function(config) {
+  this.initialize(config)
+}
+Register.PurchaseCode.inherits(Register.Code)
+Register.PaymentCode = function(config) { this.initialize(config) }
+Register.PaymentCode.inherits(Register.Code)
+Register.AdjustmentCode = function(config) { this.initialize(config) }
+Register.AdjustmentCode.inherits(Register.Code)
+Register.CreditCode = function(config) { this.initialize(config) }
+Register.CreditCode.inherits(Register.Code)
 
 /////////////////////
 // Register.Ledger
@@ -363,7 +429,11 @@ Register.Ledger.inherits(Register.Core)
 Object.extend(Register.Ledger.prototype, Register.Events.handler_for('update'))
 Object.extend(Register.Ledger.prototype, {
   // Number of ledger entries.
-  count: function() { return this.rows.length },
+  count: function(old_or_new) {
+    return old_or_new ?
+      this.__rows_by_type('all', { old_or_new: old_or_new }).length :
+      this.rows.length
+  },
 
   // Add a new LedgerRow for the given type, code and amount.
   // Throws Register.Exceptions.LedgerException if cannot determine a code from code_id.
@@ -518,7 +588,7 @@ Object.extend(Register.Ledger.prototype, {
     config = config || {}
     var old_or_new = config['old_or_new']
     return this.rows.select(function(e) { 
-      return e.code_type == code_type && (
+      return (code_type == 'all' ? true : e.code_type == code_type) && (
         old_or_new == 'new' ?
           e.is_new() :
           old_or_new == 'old' ?
@@ -585,6 +655,65 @@ Object.extend(Register.Ledger.prototype, {
   get_change_total: function(old_or_new) {
     return this.change_rows(old_or_new).sum('get_credit_or_debit') || 0
   },
+
+  // Get the total register debits.
+  get_debits_total: function(old_or_new) {
+    return this.__rows_by_type('all', { old_or_new: old_or_new }).sum('get_debit') || 0
+  },
+
+  // Get the total register credits.
+  get_credits_total: function(old_or_new) {
+    return this.__rows_by_type('all', { old_or_new: old_or_new }).sum('get_credit') || 0
+  },
+
+  // Serialize all of the new ledger row data as an array of objects.
+  serialize: function() {
+    return this.__rows_by_type('all', { old_or_new: 'new' }).map(function(r) { 
+      return r.serialize()
+    }).toArray()
+  },
+
+  // Checks that register is in a valid state.
+  // * debits and credits must balance
+  // * change cannot be negative
+  // * amount tendered must be positive for payment
+  // * amount credited must be positive for credit
+  // * payment and change must be zero for adjustment
+  // * unless we are cashing a check, there must be ledger rows
+  // * enabled required fields should be present
+  validate: function() {
+    this.errors = $A([])
+    var debits = this.get_debits_total('new')
+    var credits = this.get_credits_total('new')
+    var tendered = this.get_tendered_total('new')
+    var credited = this.get_credited_total('new')
+    var change = this.get_change_total('new')
+//    var register_form = register_section().down('form')
+    if ( change < 0 ) {
+      this.errors.push('you may not return negative change...')
+    }
+    if (this.payment_code instanceof Register.PaymentCode) {
+      if (tendered <= 0) {
+        this.errors.push('amount tendered must be positive for a payment')
+      }
+    } else if (this.payment_code instanceof Register.AdjustmentCode) {
+      if ([tendered, credited, change].any(function(e) { return e != 0 })) {
+        this.errors.push('payment and change must both be zero if you are adjusting internal accounts')
+      }
+    } else if (this.credit_code instanceof Register.CreditCode) {
+      if (credited <= 0) {
+        this.errors.push('amount credited must be positive for a credit')
+      }
+    }
+    if (debits != credits) {
+      this.errors.push('debits and credits do not balance (debits must equal credits)')
+    }
+    if ((!this.payment_code.is_check() && this.purchase_rows().length == 0) || (this.purchase_rows('old').length > 0 && this.purchase_rows('new').length == 0)) {
+      this.errors.push('no purchase codes have been entered')
+    }
+    return this.errors.length == 0
+  }
+
 })
 
 /////////////////////
@@ -785,6 +914,21 @@ Object.extend(Register.LedgerRow.prototype, {
     return true
   },
 
+  // Serialize as an Object.
+  serialize: function() {
+    return {
+      type: this.type,
+      account_number: this.account_number,
+      account_name: this.account_name,
+      detail: this.get_detail(),
+      register_code: this.register_code,
+      debit: this.get_debit(),
+      credit: this.get_credit(),
+      code_label: this.get_label(),
+      code_type: this.code_type,
+    }
+  },
+
   __set_amount: function(raw_amount, type) {
     if (this.read_only) {
       throw( new Register.Exceptions.LedgerRowException('__set_amount', "Attempted to set #{type} to #{amount} for a read only row.", { type: type, amount: raw_amount }))
@@ -853,6 +997,7 @@ Register.UI.AMOUNT_TENDERED_ID = 'amount-tendered'
 Register.UI.AMOUNT_TENDERED_ROW_SELECTOR = '.amount-tendered.row'
 Register.UI.CANCEL_CONTROL_SELECTOR = '.cancel-control a'
 Register.UI.CHANGE_DUE_ID = 'change-due'
+Register.UI.FORM_ID = 'payment-form'
 Register.UI.LEDGER_ENTRIES_ID = 'ledger-entries'
 Register.UI.LEDGER_ROW_TEMPLATE_ID = 'ledger-entry-row-template'
 Register.UI.PAYMENT_CODES_SELECT_ID = 'payment-type'
@@ -875,6 +1020,7 @@ Object.extend(Register.UI.prototype, {
       this.ledger_row_template = this.locate(Register.UI.LEDGER_ROW_TEMPLATE_ID, this.register_template).remove()
       this.root = this.register_template.cloneNode(true)
       // isolate other important elements
+      this.form = this.locate(Register.UI.FORM_ID)
       this.ledger_entries = this.locate(Register.UI.LEDGER_ENTRIES_ID)
       this.purchase_amount_input = this.locate(Register.UI.PURCHASE_AMOUNT_INPUT_ID)
       this.payment_fields = this.locate(Register.UI.PAYMENT_FIELDS_ID)
@@ -923,11 +1069,25 @@ Object.extend(Register.UI.prototype, {
     })
   },
 
+  // Find an enabled payment field by field.id.  (Will prefix 'payment_' if id does not already
+  // include it.)
+  find_payment_field: function(id) {
+    id = id.match(/^payment_/) ? id : 'payment_' + id
+    return this.get_payment_fields().detect(function(f) { return f.id == id })
+  },
+
   // Returns an Array of the enabled submission controls.
   get_submission_controls: function(all) {
     return this.submission_controls.select('input').findAll(function(e) {
       return all ? true : !e.disabled
     })
+  },
+
+  // Find an enabled submission control by field.id.  (Will prefix 'payment_submit_' if id does
+  // not include it.)
+  find_submission_control: function(id) {
+    id = id.match(/^payment_submit_/) ? id : 'payment_submit_' + id
+    return this.get_submission_controls().detect(function(f) { return f.id == id })
   },
 
   // Returns the payment code object associated with the currently selected payment type.
@@ -997,6 +1157,29 @@ Object.extend(Register.UI.prototype, {
     this.purchase_amount_input.activate()
   },
 
+  serialize: function() {
+    var serialized = {}
+    this.form.get_enabled_elements(this.payment_fields).inject(serialized, function(object,field) {
+      object[field.name] = field.value
+      return object
+    })
+    serialized[this.successful_submitter.name] = this.successful_submitter.value
+    return serialized
+  },
+
+  validate: function() {
+    var valid = this.ledger.validate()
+    this.errors = this.ledger.errors.clone()
+    required = this.form.get_enabled_elements().select(function(e) {
+      return e.hasClassName('required') && !e.present()
+    })
+    if (required.size() > 0) {
+      valid = false
+      this.errors.push('required fields have not been entered: ' + required.map(function(e) { return e.id.replace(/payment_/,'') }))
+    }
+    return valid
+  },
+
   // Callback for user choosing an entry in the purchase code select.
   // XXX Is there a good reason to add callbacks around the UI events?  Rather than
   // callbacks around core register events like totals updates?
@@ -1031,11 +1214,37 @@ Object.extend(Register.UI.prototype, {
 
   // Callback for user clicking the cancel control.
   handle_cancel_control_click: function(evnt) {
-    throw('implement me')
+    return this.register.cancel()
   },
 
-  handle_submit_control_submission: function(evnt) {
-    throw('implement me')
+  handle_submit_control_clicked: function(evnt) {
+    this.successful_submitter = evnt.findElement()
+    return true
+  },
+
+  handle_form_submit: function(evnt) {
+    evnt.stop()
+    if (!this.validate()) {
+      var message = "Please correct the following:\n"
+      this.errors.each(function(m) {
+        message = message + " * " + m + "\n"
+      })
+      this.alert_user(message)
+    } else {
+      // double-check authorization or record calls for credit cards.
+      if (this.successful_submitter.value == 'Authorize') {
+        if (!confirm("Authorizing will put a temporary hold in the amount of " + this.monetize(this.ledger.get_amount_tendered(), true) + " on the guest's credit card.  No funds will be transferred.  You may capture the funds later in a separate transaction.  Continue?")) {
+          return false
+        }
+      }
+      if (this.successful_submitter.value == 'Record' && this.get_payment_code().is_credit_card()) {
+        if (!confirm("Recording this credit card transaction will not capture any funds.  This should only be used to record a credit card transaction made through some other agency.  Continue?")) {
+          return false
+        }
+      }
+      return this.register.submit()
+    }
+    return false
   },
 
   // Initializes callback functions on user controls in the current root register ui.
@@ -1073,8 +1282,9 @@ Object.extend(Register.UI.prototype, {
   // for cancel control.
   initialize_submission_controls: function() {
     this.cancel_control.observe('click', this.handle_cancel_control_click.bind(this))
+    this.form.observe('submit', this.handle_form_submit.bind(this))
     this.get_submission_controls(true).each(function(submit) {
-      submit.observe('submit', this.handle_submit_control_submission.bind(this)) 
+      submit.observe('click', this.handle_submit_control_clicked.bind(this)) 
     }, this)
   },
 })
@@ -1294,3 +1504,21 @@ Array.prototype.sum = function(property_name) {
     return (isNaN(value) ? sum : (sum + value))
   })
 }
+
+// Returns all form controls which are not disabled, not visible, and
+// not Input[type] == 'hidden'
+//
+// If an ancestor is provided, then the elements must also be children
+// of this ancestor (useful for obtaining a subset of form controls).
+var FormUtils = {
+  get_enabled_elements: function(element, ancestor) {
+    return element.getElements().reject(function(e) { 
+      var reject = e.disabled || !e.visible() || e.type == 'hidden'
+      if (ancestor instanceof Element) {
+        reject = reject || !e.ancestors().include(ancestor)
+      }
+      return reject
+    })
+  }
+}
+Element.addMethods('form', FormUtils)

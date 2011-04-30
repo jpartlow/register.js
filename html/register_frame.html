@@ -169,7 +169,7 @@
                   <dl class="inline general">
                     <dt><label for="payment_date_1i">Date: </label></dt>
                     <dd>
-                      <select id="payment_date_1i" name="payment[date(1i)]" tabindex="-1">
+                      <select id="payment_date_1i" class="required" name="payment[date(1i)]" tabindex="-1">
                         <option value="2006">2006</option>
                         <option value="2007">2007</option>
                         <option value="2008">2008</option>
@@ -182,7 +182,7 @@
                         <option value="2015">2015</option>
                         <option value="2016">2016</option>
                       </select>
-                      <select id="payment_date_2i" name="payment[date(2i)]" tabindex="-1">
+                      <select id="payment_date_2i" class="required" name="payment[date(2i)]" tabindex="-1">
                         <option value="1">January</option>
                         <option value="2">February</option>
                         <option selected="selected" value="3">March</option>
@@ -196,7 +196,7 @@
                         <option value="11">November</option>
                         <option value="12">December</option>
                       </select>
-                      <select id="payment_date_3i" name="payment[date(3i)]" tabindex="-1">
+                      <select id="payment_date_3i" class="required" name="payment[date(3i)]" tabindex="-1">
                         <option value="1">1</option>
                         <option value="2">2</option>
                         <option value="3">3</option>
@@ -262,7 +262,7 @@
                         <option value="159">Regenia  Benton</option>
                         <option value="132">Richard  Baynton</option>
                         <option value="139">Shaundee  Laws</option>
-                        <option value="102" selected="selected">Shawn  Liebling</option>
+                        <option value="102">Shawn  Liebling</option>
                         <option value="115">Tim  McDevitt</option>
                         <option value="105">Tom  Robinson</option>
                         <option value="149">Tracy  Grainger</option>
@@ -277,7 +277,7 @@
               <hr />
          
               <div id="submission-controls" class="submission controls">
-                <span class="submit-control cancel-control"><a href="/reservation/23210/payments" tabindex="-1">Cancel</a></span>
+                <span class="submit-control cancel-control"><a href="#" tabindex="-1">Cancel</a></span>
                 <span class="show-by-type CreditCard">
                   <input id="payment_submit_purchase" name="commit" tabindex="7" type="submit" value="Purchase" />
                   <input id="payment_submit_authorize" name="commit" tabindex="7" type="submit" value="Authorize" />

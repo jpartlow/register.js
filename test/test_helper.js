@@ -18,7 +18,7 @@ function fireEvent(element,event){
     // dispatch for firefox + others
     var evt = document.createEvent("HTMLEvents");
     evt.initEvent(event, true, true ); // event type,bubbling,cancelable
-    return !element.dispatchEvent(evt);
+    return element.dispatchEvent(evt);
   }
 }
 
@@ -35,6 +35,11 @@ function is_undefined(object, message) {
 function is_null(object, message) {
   message = message || object + ' should be null'
   ok(object === null, message)
+}
+
+function matches(string, regexp, message) {
+  message = (message ? message : '') + "Unable to match: '" + regexp + "'\nin: '" + string + "'"
+  ok(string.match(regexp), message)
 }
 
 // deepEqual fails when comparing Prototype Elements
@@ -61,6 +66,41 @@ function equal_elements(actual, expected, deep) {
   $A(actual).zip(expected).each(function(pair) {
     equal_element(pair[0], pair[1], deep)
   })
+}
+
+function add_purchase(ui, amount, code) {
+  var pc = ui.purchase_codes_select
+  var am = ui.purchase_amount_input
+  am.value = amount
+  pc.value = code
+  ok(fireEvent(pc, 'change'), 'payment select change event failed for add_purchase')
+  return true
+}
+
+function change_tendered(ui, amount) {
+  ui.tendered.value = amount
+  ok(fireEvent(ui.tendered, 'change'), 'amount tendered change event failed for change_tendered')
+  return true
+}
+
+function set_field(ui, field_id, value) {
+  var field = ui.find_payment_field(field_id)
+  field.value = value
+  ok(fireEvent(field, 'change'), 'change event for ' + field_id + ' failed for set_field')
+  return true
+}
+
+function set_user_id(ui, value) {
+  var user_id = ui.find_payment_field('user_id')
+  value = value || user_id.options[1].value
+  set_field(ui, 'user_id', value)
+}
+
+function submit(ui, action) {
+  var control = ui.find_submission_control(action)
+  ok(fireEvent(control, 'click'), 'click event for ' + action + ' submit control failed for submit()')
+  ok(!fireEvent(ui.form, 'submit'), 'submit event for form not cancelled for submit()')
+  return true
 }
 
 // Reinitializes gold data for test configuration and comparisons.
@@ -122,7 +162,7 @@ function GoldData() {
 
   this.payment_codes = [
     {
-      id: 3,
+      id: 13,
       code: "CA",
       label: "Cash",
       account_number: "1010.000",
@@ -132,9 +172,10 @@ function GoldData() {
       account_type: "Asset",
       debit_or_credit: "D",
       allow_detail: false,
+      allows_change: true,
     },
     {
-      id: 4,
+      id: 14,
       code: "CVT",
       label: "Credit Voucher Payment",
       account_number: "2251.000",
@@ -145,7 +186,7 @@ function GoldData() {
       allow_detail: false,
     },
     {
-      id: 5,
+      id: 15,
       code: "CH",
       label: "Check",
       account_number: "1900.000",
@@ -154,9 +195,10 @@ function GoldData() {
       account_type: "Asset",
       debit_or_credit: "D",
       allow_detail: false,
+      allows_change: true,
     },
     {
-      id: 6,
+      id: 16,
       code: "CCT",
       label: "Credit Card",
       account_number: "1900.000",
@@ -165,6 +207,7 @@ function GoldData() {
       account_type: "Asset",
       debit_or_credit: "D",
       allow_detail: false,
+      allows_change: true,
     },
   ]
 
@@ -172,7 +215,7 @@ function GoldData() {
 
   this.credit_codes = [
     {
-      id: 7,
+      id: 20,
       code: "CVTC",
       label: "Issue Credit Voucher",
       account_number: "2251.000",
@@ -183,7 +226,7 @@ function GoldData() {
       allow_detail: false,
     },
     {
-      id: 8,
+      id: 21,
       code: "GCTC",
       label: "Gift Certificate Credit",
       account_number: "2250.000",
@@ -192,6 +235,14 @@ function GoldData() {
       account_type: "Liability",
       debit_or_credit: "C",
       allow_detail: false,
+    },
+  ]
+
+  this.adjustment_codes = [
+    {
+      id: 30,
+      code: "CMP",
+      label: "Comp",
     },
   ]
 
@@ -237,12 +288,14 @@ function GoldData() {
   ]
 
   this.template = this.extract_register_template()
+  this.payment_template = this.extract_payment_template()
 }
 GoldData.prototype = {
   new_payment_register_config: function() {
     return {
       purchase_codes: this.purchase_codes,
       payment_codes: this.payment_codes,
+      adjustment_codes: this.adjustment_codes,
       credit_codes: this.credit_codes,
       template: this.template,
     }
@@ -252,6 +305,7 @@ GoldData.prototype = {
     return {
       purchase_codes: this.purchase_codes,
       payment_codes: this.payment_codes,
+      adjustment_codes: this.adjustment_codes,
       credit_codes: this.credit_codes,
       payment: this.payment,
       ledger: this.ledger,
@@ -260,11 +314,28 @@ GoldData.prototype = {
   },
 
   extract_register_template: function() {
-    if (typeof(GoldData.register_template) == 'undefined') {
-      var register = $('register').remove()
-      var wrapper = new Element('div').update(register)
-      GoldData.register_template  = wrapper.innerHTML
-    }
-    return GoldData.register_template
+    return this.extract_template('register', 'register_template', true)
   },
+
+  extract_payment_template: function() {
+    return this.extract_template('test-payment-template', 'test_payment_template', false)
+  },
+
+  extract_template: function(id, property, serialize) {
+    if (typeof GoldData[property] == 'undefined') {
+      var template = $(id)
+      if (template) {
+        template.remove()
+        if (serialize) {
+          // serialize as a string
+          var wrapper = new Element('div').update(template)
+          GoldData[property] = wrapper.innerHTML
+        } else {
+          // just reference the removed element
+          GoldData[property] = template
+        }
+      }
+    }
+    return GoldData[property]
+  }
 }

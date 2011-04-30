@@ -36,7 +36,13 @@ test("construct", function() {
 test("initialize_array_of", function() {
   expect(1)
   var core = new Register.Core()
-  deepEqual(core.initialize_array_of(Register.Code, [ {}, {} ]), [ new Register.Code(), new Register.Code() ])
+  deepEqual(
+    core.initialize_array_of(Register.Code, [ {}, {} ]),
+    [ 
+      new Register.Code(),
+      new Register.Code()
+    ]
+  )
 })
 
 test("initialize_array_of-lookup", function() {
@@ -177,7 +183,25 @@ test("init-code", function() {
   strictEqual(code.account_type, code_data.account_type)
   strictEqual(code.debit_or_credit, code_data.debit_or_credit)
   strictEqual(code.payment_type, code_data.payment_type)
+  strictEqual(code.allow_cash, code_data.allow_cash)
 })
+
+test("register-code-subtypes", function() {
+  expect(8)
+  var pc = new Register.PurchaseCode(this.gold.purchase_codes[0])
+  var py = new Register.PaymentCode(this.gold.payment_codes[0])
+  var cr = new Register.CreditCode(this.gold.credit_codes[0])
+  var aj = new Register.AdjustmentCode(this.gold.adjustment_codes[0])
+  
+  ok( pc instanceof Register.PurchaseCode)
+  ok( pc instanceof Register.Code)
+  ok( py instanceof Register.PaymentCode)
+  ok( py instanceof Register.Code)
+  ok( cr instanceof Register.CreditCode)
+  ok( cr instanceof Register.Code)
+  ok( aj instanceof Register.AdjustmentCode)
+  ok( aj instanceof Register.Code)
+}),
 
 module("register-new-payment", {
   setup: function() {
@@ -198,19 +222,21 @@ test("register-initialization", function() {
 })
 
 test("register-find-code", function() {
-  expect(3)
+  expect(4)
   var pc = this.gold.purchase_codes[0]
   var py = this.gold.payment_codes[0]
   var cr = this.gold.credit_codes[0]
-  deepEqual(this.register.find_code(pc.id), new Register.Code(pc))
-  deepEqual(this.register.find_code(py.id), new Register.Code(py))
-  deepEqual(this.register.find_code(cr.id), new Register.Code(cr))
+  var aj = this.gold.adjustment_codes[0]
+  deepEqual(this.register.find_code(pc.id), new Register.PurchaseCode(pc))
+  deepEqual(this.register.find_code(py.id), new Register.PaymentCode(py))
+  deepEqual(this.register.find_code(cr.id), new Register.CreditCode(cr))
+  deepEqual(this.register.find_code(aj.id), new Register.AdjustmentCode(aj))
 })
 
 test("register-change-code", function() {
   expect(1)
   var change_code = this.gold.payment_codes[0]
-  deepEqual(this.register.change_code(), new Register.Code(change_code))
+  deepEqual(this.register.change_code(), new Register.PaymentCode(change_code))
 })
 
 test("register-ledger-count", function() {
@@ -379,17 +405,19 @@ test("register-ledger-rows-by-type", function() {
 })
 
 test("register-ledger-totals-for-new", function() {
-  expect(5)
+  expect(7)
   var ledger = this.register.ledger
   equal(ledger.get_purchase_total(), 0)
   equal(ledger.get_payment_total(), 0)
   equal(ledger.get_tendered_total(), 0)
   equal(ledger.get_credited_total(), 0)
   equal(ledger.get_change_total(), 0)
+  equal(ledger.get_credits_total(), 0)
+  equal(ledger.get_debits_total(), 0)
 })
 
 test("register-ledger-totals-for-existing", function() {
-  expect(5)
+  expect(7)
   var register = new Register.Instance(this.gold.edit_payment_register_config())
   var ledger = register.ledger
   equal(ledger.get_purchase_total(), 32)
@@ -397,6 +425,8 @@ test("register-ledger-totals-for-existing", function() {
   equal(ledger.get_tendered_total(), 40)
   equal(ledger.get_credited_total(), 0)
   equal(ledger.get_change_total(), 8)
+  equal(ledger.get_credits_total(), 40)
+  equal(ledger.get_debits_total(), 40)
 })
 
 test("register-ledger-set-payment-code", function() {
@@ -695,17 +725,14 @@ test("register-ui-totals", function() {
 })
 
 test("register-ui-adding-purchase-row-updates-totals", function() {
-  expect(9)
+  expect(10)
   var ui = this.register.ui.initialize()
-  var pc = ui.purchase_codes_select
-  var am = ui.purchase_amount_input
   equal(ui.total.textContent, '$0.00')
   equal(ui.tendered.value, '$0.00')
   equal(ui.credited.textContent, '$0.00')
   equal(ui.change.textContent, '$0.00')
-  am.value = '100'
-  pc.value = '1'
-  fireEvent(pc, 'change')
+
+  add_purchase(ui, '100', '1')
   equal(ui.total.textContent, '$100.00')
   equal(ui.tendered.value, '$100.00')
   ok(!ui.credited_row.visible())
@@ -714,29 +741,23 @@ test("register-ui-adding-purchase-row-updates-totals", function() {
 })
 
 test("register-ui-changing-amount-tendered-updates-totals", function() {
-  expect(15)
+  expect(18)
   var ui = this.register.ui.initialize()
-  var pc = ui.purchase_codes_select
-  var am = ui.purchase_amount_input
-  am.value = '100'
-  pc.value = '1'
-  fireEvent(pc, 'change')
+  add_purchase(ui, '100', '1')
   equal(ui.total.textContent, '$100.00')
   equal(ui.tendered.value, '$100.00')
   ok(!ui.credited_row.visible())
   equal(ui.credited.textContent, '$0.00')
   equal(ui.change.textContent, '$0.00')
 
-  ui.tendered.value = '50'
-  fireEvent(ui.tendered, 'change')
+  change_tendered(ui, '50')
   equal(ui.total.textContent, '$100.00')
   equal(ui.tendered.value, '$50.00')
   ok(!ui.credited_row.visible())
   equal(ui.credited.textContent, '$0.00')
   equal(ui.change.textContent, '$-50.00')
 
-  ui.tendered.value = '150'
-  fireEvent(ui.tendered, 'change')
+  change_tendered(ui, '150')
   equal(ui.total.textContent, '$100.00')
   equal(ui.tendered.value, '$150.00')
   ok(!ui.credited_row.visible())
@@ -745,13 +766,9 @@ test("register-ui-changing-amount-tendered-updates-totals", function() {
 })
 
 test("register-ui-updating-purchase-row-updates-totals", function() {
-  expect(10)
+  expect(12)
   var ui = this.register.ui.initialize()
-  var pc = ui.purchase_codes_select
-  var am = ui.purchase_amount_input
-  am.value = '100'
-  pc.value = '1'
-  fireEvent(pc, 'change')
+  add_purchase(ui, '100', '1')
   equal(ui.total.textContent, '$100.00')
   equal(ui.tendered.value, '$100.00')
   ok(!ui.credited_row.visible())
@@ -760,7 +777,7 @@ test("register-ui-updating-purchase-row-updates-totals", function() {
 
   var lr = ui.rows.first()
   lr.credit.value = '50'
-  fireEvent(lr.credit, 'change')  
+  ok(fireEvent(lr.credit, 'change'))
   equal(ui.total.textContent, '$50.00')
   equal(ui.tendered.value, '$50.00')
   ok(!ui.credited_row.visible())
@@ -769,13 +786,9 @@ test("register-ui-updating-purchase-row-updates-totals", function() {
 })
 
 test("register-ui-deleting-purchase-row-updates-totals", function() {
-  expect(11)
+  expect(13)
   var ui = this.register.ui.initialize()
-  var pc = ui.purchase_codes_select
-  var am = ui.purchase_amount_input
-  am.value = '100'
-  pc.value = '1'
-  fireEvent(pc, 'change')
+  add_purchase(ui, '100', '1')
   equal(ui.total.textContent, '$100.00')
   equal(ui.tendered.value, '$100.00')
   ok(!ui.credited_row.visible())
@@ -783,7 +796,7 @@ test("register-ui-deleting-purchase-row-updates-totals", function() {
   equal(ui.change.textContent, '$0.00')
 
   var lr = ui.rows.first()
-  fireEvent(lr.remove, 'click')  
+  ok(fireEvent(lr.remove, 'click'))
   equal(ui.total.textContent, '$0.00')
   equal(ui.tendered.value, '$0.00')
   ok(!ui.credited_row.visible())
@@ -793,13 +806,9 @@ test("register-ui-deleting-purchase-row-updates-totals", function() {
 })
 
 test("register-ui-credit-totals", function() {
-  expect(10)
+  expect(12)
   var ui = this.register.ui.initialize()
-  var pc = ui.purchase_codes_select
-  var am = ui.purchase_amount_input
-  am.value = '100'
-  pc.value = '1'
-  fireEvent(pc, 'change')
+  add_purchase(ui, '100', '1')
   equal(ui.total.textContent, '$100.00')
   equal(ui.tendered.value, '$100.00')
   ok(!ui.credited_row.visible())
@@ -808,7 +817,7 @@ test("register-ui-credit-totals", function() {
 
   var lr = ui.rows.first()
   lr.credit.value = -50
-  fireEvent(lr.credit, 'change')  
+  ok(fireEvent(lr.credit, 'change'))
   equal(ui.total.textContent, '$-50.00')
   equal(ui.tendered.value, '$0.00')
   ok(!ui.tendered_row.visible())
@@ -817,8 +826,57 @@ test("register-ui-credit-totals", function() {
 })
 
 test("register-ui-submit", function() {
-  expect(5)
+  expect(14)
   var ui = this.register.ui.initialize()
-  fireEvent(ui.root, 'submit')
-  ok(false)
+  var register = this.register
+  var serialized
+  register.on_submit = function(serialized_form) {
+    return serialized = serialized_form 
+  }
+  submit(ui, 'record')
+  equal(ui.errors.length, 3)
+  matches(ui.last_alert, /amount tendered/)
+  matches(ui.last_alert, /no purchase codes/)
+  matches(ui.last_alert, /required.*user_id/)
+  is_undefined(serialized)
+
+  ui.last_alert = undefined 
+  add_purchase(ui, '100', '1')
+  set_user_id(ui)
+  submit(ui, 'record')
+  equal(ui.errors.length, 0)
+  is_undefined(ui.last_alert)
+  deepEqual(serialized, {
+    "commit": "Record",
+    "payment[type]": "13",
+    "payment[date(1i)]": "2011",
+    "payment[date(2i)]": "3",
+    "payment[date(3i)]": "29",
+    "payment[user_id]": "106",
+    "payment[note]": "",
+    "payment[ledger_entries]": [
+      {
+        "type": "Income",
+        "account_number": "4210.000",
+        "account_name": "Store Purchase",
+        "detail": undefined,
+        "register_code": "ST",
+        "debit": undefined,
+        "credit": 100,
+        "code_label": "Store Purchase",
+        "code_type": "purchase"
+      },
+      {
+        "type": "Asset",
+        "account_number": "1010.000",
+        "account_name": "Cash",
+        "detail": undefined,
+        "register_code": "CA",
+        "debit": 100,
+        "credit": undefined,
+        "code_label": "Cash",
+        "code_type": "payment"
+      },
+    ],
+  })
 })
