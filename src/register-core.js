@@ -1610,18 +1610,6 @@ Object.extend(Register.UI.prototype, {
     }.bind(this))
   },
 
-  // Advances focus to the next visible, non-hidden, non-disabled descendant
-  // input, textarea or select element that participates in the tab order in the
-  // current form.  Expects an input, textarea or select element of the form.
-  focus_on_next_field: function(current_control) {
-    var form = current_control.up('form')
-    var controls = form.get_enabled_elements().reject(function(e) { return e.tabIndex <= 0 })
-    controls.sort(function(a,b) { return a.tabIndex > b.tabIndex })
-    var index = controls.indexOf(current_control)
-    var next = controls[index + 1]
-    next.focus()
-  },
-
 })
 // Type Functions
 
