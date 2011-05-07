@@ -22,15 +22,65 @@
     <div id="register-template">
 <%= File.open("html/register_frame.html").read() %>
     </div> <!-- #register-template -->
+    <hr />
+    <div id="test-payments">
+      <h1>Payments</h1>
+      <div id="test-payment-template">
+        <div class="column ledger-entries">
+          <table>
+            <tr>
+              <th>type</th>
+              <th>account_number</th>
+              <th>account_name</th>
+              <th>detail</th>
+              <th>register_code</th>
+              <th>debit</th>
+              <th>credit</th>
+              <th>code_label</th>
+              <th>code_Type</th>
+            </tr>
+          </table>
+        </div>
+        <div class="column payment-fields">
+        </div>
+        <div class="controls">
+        </div>
+      </div>
+    </div>
     <script type="text/javascript">
       // <![CData[
       var gold = new GoldData()
+      var payments= $A([])
+
       $('create-register').observe('click', function(evnt) {
         evnt.stop()
         var register = Register.create(gold.new_payment_register_config())
+        register.on_submit = handle_test_submission
         var container = $('new-register')
         container.update(register.root())
       }) 
+
+      function handle_test_submission(event, serialized) {
+        payments.push(serialized)
+        var payment = Object.clone(serialized)
+        var rows = $A(payment['payment[ledger_entries]']).clone()
+        delete payment['payment[ledger_entries]']
+
+        var payment_div = gold.payment_template.cloneNode(true)
+        payment_div.down('.payment-fields').update(Object.toJSON(payment))
+        var ledger_table = payment_div.down('.ledger-entries table')
+        rows.each(function(row) {
+          var tr = new Element('tr')
+          for (var prop in row) {
+// var ['type', 'account_number', 'account_name', 'detail', 'register_code', 'debit', 'credit', 'code_label', 'code_type'].each(function(prop) {
+            tr.insert(new Element('td').update(row[prop]))
+          }
+          ledger_table.insert(tr)
+        })
+        $('test-payments').insert(payment_div)
+        this.cancel()
+      }
+      
       // ]]>
     </script>
   </body>

@@ -1,16 +1,63 @@
-// This file is part of register.js.  Copyright 2011 Joshua Partlow.  This program is free software, licensed under the terms of the GNU General Public License.  Please see the LICENSE file in this distribution for more information, or see http://www.gnu.org/copyleft/gpl.html.
+/* This file is part of register.js.  Copyright 2011 Joshua Partlow.  This program is free software, licensed under the terms of the GNU General Public License.  Please see the LICENSE file in this distribution for more information, or see http://www.gnu.org/copyleft/gpl.html. */
 
 var Register = {
   version: '0.1.0',
   debug: false,
   registers: $H(),
 
-  // Create a new Register.Instance from config and store it in the
-  // Register.registers hash.
+  // Create and initialize a new Register.Instance from config and store it in
+  // the Register.registers hash.
   create: function(config) {
     var register = new Register.Instance(config).initialize()
     this.registers.set(register.id(), register)
     return register
+  },
+
+  // Create and initialize a new Register.Instance from config and update
+  // container_element with its root element.
+  create_and_update: function(config, container_element) {
+    var register = this.create(config)
+    container_element.update(register.root())
+    register.ui.purchase_amount_input.focus()
+    return register
+  },
+
+  // Update the register identified by id.
+  // (used to provide error information if server fails to post)
+  update: function(id, changes) {
+    var register = this.registers.get(id)
+    register.set_errors(changes)
+  },
+
+  // Make an Ajax request for register configuration.
+  //
+  // * href: url to request register configuration from via Ajax.
+  // * update: element to be updated with the new register
+  // * config: an object with additional configuration
+  //   * ajax: overrides to Prototype Ajax.Request settings.
+  //   * register: initial Registration.Instance configuration
+  //   to be added to configuration returned from the Ajax call.
+  request_register: function(href, update, config) {
+    config = $H(config || {})
+    ajax_overrides = config.unset('ajax') || {}
+    base_register_config = config.unset('register') || {}
+    var ajax_config = $H({
+      method: 'get', 
+      onSuccess: function(response) {
+        var config = $H(base_register_config).merge(response.responseJSON)
+        return Register.create_and_update(config.toObject(), update) 
+      },
+      onFailure: function(response) { 
+        alert("Failed to initialize register: " + response.status + ":" + response.statusText +
+          "\n\n" + response.responseText)
+      },
+      onException: function(request, exception) {
+        alert("Failed to initialize register.  Threw: " + exception)
+      },
+      onComplete: this.hide_spinner,
+    }).merge(ajax_overrides)
+    this.show_spinner()
+    new Ajax.Request(href, ajax_config.toObject())
   },
 
   // Remove the given Register.Instance from the Register.registers hash
@@ -19,11 +66,18 @@ var Register = {
     if (instance.root()) { instance.root().remove() }
     this.registers.unset(instance.id())
   },
+
+  // Override with a local function to show a work in progress graphic.
+  show_spinner: null,
+
+  // Override with a local function to hide a work in progress graphic.
+  hide_spinner: null,
 }
 
-//////////////////////
-// Simple Inheritance
-//////////////////////
+////////////////////////
+/* Simple Inheritance */
+////////////////////////
+
 Function.prototype.inherits = function(parent_function) { 
   this.prototype = new parent_function
   this.prototype.constructor = this
@@ -31,9 +85,9 @@ Function.prototype.inherits = function(parent_function) {
   return this
 } 
 
-///////////////////
-// Register.Events
-///////////////////
+/////////////////////
+/* Register.Events */
+/////////////////////
 
 Register.Events = {
   // Call this  to provide a new object cloned from Register.Events.Methods with
@@ -92,7 +146,7 @@ Register.Events.Methods = {
 }
 
 ///////////////////
-// Register.Core
+/* Register.Core */
 ///////////////////
 
 // Methods available to all Register.<Object> instances.
@@ -201,18 +255,21 @@ Register.Core.prototype = {
 
   // Update an element's innerHTML from an array of elements and/or html strings.
   // Returns the element for chaining.
-  update_from_array: function(element, array) {
+  update_from_array: function(element, array, sort) {
     element.update()
-    $A(array).each(function(e) {
+    var options = array
+    if (sort) { options = options.sortBy(function(o) { return o.textContent }) }
+    $A(options).each(function(e) {
       element.insert(e)
     })
     return element
   },
 }
 
-///////////////////////
-// Register.Exceptions
-//////////////////////
+/////////////////////////
+/* Register.Exceptions */
+/////////////////////////
+
 Register.Exceptions = {
   BaseException: function() {},
 
@@ -250,16 +307,19 @@ Register.Exceptions = {
     this.message = "Unable to find " + selector + " in " + element
     this.stack = Register.Exceptions.generate_stack_trace() 
   },
-}  
+}
+Register.Exceptions.BaseException.prototype = {
+  toString: function() { return this.name + ":" + this.message },
+}
 Register.Exceptions.generate_exception_type('RegisterException')
 Register.Exceptions.generate_exception_type('LedgerException')
 Register.Exceptions.generate_exception_type('LedgerRowException')
 Register.Exceptions.generate_exception_type('EventException')
 Register.Exceptions.MissingElementException.prototype = new Register.Exceptions.BaseException()
 
-/////////////////////
-// Register.Instance
-/////////////////////
+///////////////////////
+/* Register.Instance */
+///////////////////////
 
 // A Register.Instance is the primary handle for an active register.
 //
@@ -283,6 +343,7 @@ Register.Instance = function(config) {
   this.ledger = new Register.Ledger(this, { rows: this.config.ledger })
   this.payment = new Register.Payment(this, this.config.payment)
   this.ui = new Register.UI(this, this.config.template)
+  this.after_create = this.config.after_create
 }
 Register.Instance.inherits(Register.Core)
 // Constants
@@ -292,12 +353,20 @@ Object.extend(Register.Instance.prototype, {
   // Call this to prepare the instance for use.
   initialize: function() {
     this.ui.initialize()
+    if (typeof this.after_create == 'function') { this.after_create() }
     return this
   },
 
   // Payment identifier for this register or Register.Instance.NEW_MARKER if this is for a new payment.
   id: function() {
     return this.payment.id || Register.Instance.NEW_MARKER
+  },
+
+  // Extracts error info from returned data and updates UI.
+  set_errors: function(errors) {
+    this.payment_error = errors.payment_error
+    this.validation_errors = errors.validation_errors
+    this.ui.display_errors()
   },
 
   // True if instance is for a new payment.
@@ -315,6 +384,14 @@ Object.extend(Register.Instance.prototype, {
     return this.code_index.get(code_id)
   },
 
+  // Lookup a purchase, payment, or credit code by the given field.
+  // (results are indeterminate if lookup_field is not a unique key)
+  find_code_by: function(lookup_field, value)  {
+    return this.code_index.values().detect(function(c) {
+      return c[lookup_field] == value
+    }) 
+  },
+
   // Return the cash payment code which should be associated with change.
   // XXX This relies on the payment_type being 'Cash'
   change_code: function() {
@@ -324,33 +401,104 @@ Object.extend(Register.Instance.prototype, {
     return this.__change_code
   },
 
-  // Override to hook into the Register's cancel cycle.
-  on_cancel: function() { return true },
+  // Register a callback method for a Register event.
+  add_listener: function(event, callback) {
+    this.ledger.add_listener(event, callback) 
+  },
 
-  cancel: function() {
-    if (this.on_cancel()) {
-      Register.destroy(this)
-      return true
+  // Override to hook into the Register's cancel cycle.
+  on_cancel: function(event) { return true },
+
+  cancel: function(event) {
+    var success = false
+    this.show_spinner()
+    if (this.on_cancel(event)) {
+      var href = event.findElement().href || '#'
+      if (href.match(/^#/)) {
+        event.stop()
+        Register.destroy(this)
+        this.hide_spinner()
+      }
+      // otherwise let the page reload
+      success = true
     }
-    return false
+    return success 
   },
 
   // Override to hook into the Register's submit cycle,
-  on_submit: function(serialized_form) { return true },
+  on_submit: function(event, parameters) { return true },
 
-  submit: function() {
-    var serialized = this.serialize()
-    if (this.on_submit(serialized)) {
-      return true
+  submit: function(event) {
+    var success = false
+    var parameters = this.parameterize()
+    var id = this.id()
+    this.show_spinner()
+    if (this.on_submit(event, parameters)) {
+      var href = this.ui.form.target || '#'
+      if (!href.match(/^#/)) {
+        new Ajax.Request(href, {
+          parameters: parameters, 
+          // invalid payment data
+          on422: function(response) {
+            Register.update(id, response.responseJSON)
+            Register.hide_spinner()
+          },
+          // if successful redirect
+          onSuccess: function(response) {
+            window.location = response.responseJSON.location
+          },
+          // general server failure
+          onFailure: function(response) {
+            var json = response.responseJSON
+            if (json) {
+              alert("Payment failed: " + json.payment_error)
+              Register.update(id, json)
+            } else {
+              alert("Server failure: " + response.status + ":" + response.statusText + "\n\n" + response.responseText)
+            }
+            Register.hide_spinner()
+          },
+          onException: function(request, exception) {
+            alert("Failed to submit register.  Threw: " + exception)
+            Register.hide_spinner()
+          },
+        })
+      } else {
+        this.hide_spinner()
+      }
+      success = true 
     }
-    return false
+    return success
   },
 
   // Return an object with properties for all of the ledger, payment and form data.
   serialize: function() {
     var serialized = this.ui.serialize()
-    serialized['payment[ledger_entries]'] = this.ledger.serialize()
+    serialized['ledger_entries_attributes'] = this.ledger.serialize()
     return serialized
+  },
+
+  // Return an object with properties for all of the ledger, payment and form
+  // data suitable for submission as form parameters (no nested objects).
+  parameterize: function() {
+    var parameterized =$H(this.serialize())
+    var ledger_entries_attributes = parameterized.unset('ledger_entries_attributes')
+    $A(ledger_entries_attributes).each(function(object,i) {
+      for (attr in object) {
+        parameterized.set('payment[ledger_entries_attributes][' + i + '][' + attr + ']', object[attr])
+      } 
+    })
+    return parameterized.toObject()
+  },
+
+  // Show work in progress spinner if present.
+  show_spinner: function() {
+    if (typeof Register.show_spinner == 'function') { Register.show_spinner() }
+  },
+
+  // Hide work in progress spinner if present.
+  hide_spinner: function() {
+    if (typeof Register.hide_spinner == 'function') { Register.hide_spinner() }
   },
 
   // Creates a Hash to index all of the purchase/payment/credit codes by id.
@@ -370,7 +518,7 @@ Object.extend(Register.Instance.prototype, {
 })
 
 /////////////////////
-// Register.Code
+/* Register.Code   */
 /////////////////////
 
 // A Register.Code represents one code that a user of the register would
@@ -413,7 +561,7 @@ Register.CreditCode = function(config) { this.initialize(config) }
 Register.CreditCode.inherits(Register.Code)
 
 /////////////////////
-// Register.Ledger
+/* Register.Ledger */
 /////////////////////
 
 // The Register.Ledger is the collection of all ledger entries which
@@ -430,9 +578,7 @@ Object.extend(Register.Ledger.prototype, Register.Events.handler_for('update'))
 Object.extend(Register.Ledger.prototype, {
   // Number of ledger entries.
   count: function(old_or_new) {
-    return old_or_new ?
-      this.__rows_by_type('all', { old_or_new: old_or_new }).length :
-      this.rows.length
+    return this.get_rows(old_or_new).length
   },
 
   // Add a new LedgerRow for the given type, code and amount.
@@ -598,6 +744,11 @@ Object.extend(Register.Ledger.prototype, {
     })
   },
 
+  // Get all ledger rows, old or new or both.
+  get_rows: function(old_or_new) {
+    return this.__rows_by_type('all', { old_or_new: old_or_new })
+  },
+
   // Get the purchase rows, both old and new.
   // If you pass 'old' you will get only the old saved rows, if any.
   // If you pass 'new' you will get only the new unsaved rows.
@@ -688,7 +839,6 @@ Object.extend(Register.Ledger.prototype, {
     var tendered = this.get_tendered_total('new')
     var credited = this.get_credited_total('new')
     var change = this.get_change_total('new')
-//    var register_form = register_section().down('form')
     if ( change < 0 ) {
       this.errors.push('you may not return negative change...')
     }
@@ -716,9 +866,9 @@ Object.extend(Register.Ledger.prototype, {
 
 })
 
-/////////////////////
-// Register.LedgerRow
-/////////////////////
+////////////////////////
+/* Register.LedgerRow */
+////////////////////////
 
 // A debit or credit associated with an account.
 // Config may be an Object of raw ledger entry fields as returned by the server,
@@ -756,8 +906,9 @@ Object.extend(Register.Ledger.prototype, {
 //
 // NOTE: only one of either debit or credit should be present.
 //
-// Throws Register.Exceptions.LedgerRowException if both debit, credit are set, if amount is 0
-// or not a number, or if the code_type is not one of Register.LedgerRow.TYPES.
+// Throws Register.Exceptions.LedgerRowException if both debit, credit are set,
+// if amount is 0 or not a number, or if the code_type is not one of
+// Register.LedgerRow.TYPES.
 //
 // Properties
 //
@@ -965,9 +1116,9 @@ Object.extend(Register.LedgerRow.prototype, {
   },
 })
 
-/////////////////////
-// Register.Payment
-/////////////////////
+//////////////////////
+/* Register.Payment */
+//////////////////////
 
 // General information about the payment.
 Register.Payment = function(register, config) {
@@ -977,7 +1128,7 @@ Register.Payment = function(register, config) {
 Register.Payment.inherits(Register.Core)
 
 /////////////////////
-// Register.UI
+/* Register.UI     */
 /////////////////////
 
 // Provides the HTML and events for user interaction with the register.
@@ -997,7 +1148,11 @@ Register.UI.AMOUNT_TENDERED_ID = 'amount-tendered'
 Register.UI.AMOUNT_TENDERED_ROW_SELECTOR = '.amount-tendered.row'
 Register.UI.CANCEL_CONTROL_SELECTOR = '.cancel-control a'
 Register.UI.CHANGE_DUE_ID = 'change-due'
+Register.UI.CREDIT_CARD_TRACK_ONE_ID = 'payment_credit_card_track_one'
+Register.UI.CREDIT_CARD_TRACK_TWO_ID = 'payment_credit_card_track_two'
+Register.UI.ERRORS_SELECTOR = '.errorExplanation'
 Register.UI.FORM_ID = 'payment-form'
+Register.UI.KEY_PERCENT_SIGN = 37
 Register.UI.LEDGER_ENTRIES_ID = 'ledger-entries'
 Register.UI.LEDGER_ROW_TEMPLATE_ID = 'ledger-entry-row-template'
 Register.UI.PAYMENT_CODES_SELECT_ID = 'payment-type'
@@ -1018,9 +1173,12 @@ Object.extend(Register.UI.prototype, {
     if (this.register_template) {
       // isolate ledger_row_template and set the root register element
       this.ledger_row_template = this.locate(Register.UI.LEDGER_ROW_TEMPLATE_ID, this.register_template).remove()
+      this.ledger_row_template.id = null // don't want to propogate the template id in new rows...
       this.root = this.register_template.cloneNode(true)
       // isolate other important elements
       this.form = this.locate(Register.UI.FORM_ID)
+      this.errors_div = this.locate(Register.UI.ERRORS_SELECTOR)
+      this.errors_div.hide()
       this.ledger_entries = this.locate(Register.UI.LEDGER_ENTRIES_ID)
       this.purchase_amount_input = this.locate(Register.UI.PURCHASE_AMOUNT_INPUT_ID)
       this.payment_fields = this.locate(Register.UI.PAYMENT_FIELDS_ID)
@@ -1032,11 +1190,21 @@ Object.extend(Register.UI.prototype, {
       this.change = this.locate(Register.UI.CHANGE_DUE_ID)
       this.submission_controls = this.locate(Register.UI.SUBMISSION_CONTROLS_ID)
       this.cancel_control = this.locate(Register.UI.CANCEL_CONTROL_SELECTOR)
+      this.credit_card_track_one = this.locate(Register.UI.CREDIT_CARD_TRACK_ONE_ID)
+      this.credit_card_track_two = this.locate(Register.UI.CREDIT_CARD_TRACK_TWO_ID)
       // populate select controls with codes
       this.purchase_codes_select = this.locate(Register.UI.PURCHASE_CODES_SELECT_ID)
-      this.update_from_array(this.purchase_codes_select, this.make_options(this.purchase_codes, 'id', 'label', { value: Register.UI.PURCHASE_CODES_SELECT_BLANK_VALUE, label: '- Select a code -' }))
+      this.update_from_array(this.purchase_codes_select,
+        this.make_options(
+          this.purchase_codes, 
+          'id', 
+          function(o) { return o.code + " (" + o.label + ")" }, 
+          { value: Register.UI.PURCHASE_CODES_SELECT_BLANK_VALUE, label: '- Select a code -' }
+        ),
+        true
+      )
       this.payment_codes_select = this.locate(Register.UI.PAYMENT_CODES_SELECT_ID)
-      this.update_from_array(this.payment_codes_select, this.make_options(this.payment_codes, 'id', 'label'))
+      this.update_from_array(this.payment_codes_select, this.make_options(this.payment_codes, 'id', 'label'), true)
       // initialize callback functions in the root register so that it will respond to
       // user actions
       this.initialize_register_callbacks()
@@ -1062,18 +1230,57 @@ Object.extend(Register.UI.prototype, {
     this.credited.ledger_value == 0 ? this.credited_row.hide() : this.credited_row.show()
   },
 
-  // Returns an Array of the visible payment fields.
-  get_payment_fields: function() {
-    return this.payment_fields.select('input','select','textarea').findAll(function(e) {
-      return !e.disabled
+  display_errors: function() {
+    this.errors_div.update('')
+    var payment_error = this.register.payment_error
+    var validation_errors = this.register.validation_errors
+    if (payment_error || validation_errors) {
+      this.errors_div.insert(new Element('h2').update('Payment Errors'))
+      if (payment_error) {
+        this.errors_div.insert(new Element('p').update(payment_error)) 
+      }
+      if (validation_errors) {
+        var ul = new Element('ul')
+        $A(validation_errors.errors).each(function(err) {
+          ul.insert(new Element('li').update(err))
+        })
+        this.errors_div.insert(ul)
+        this.payment_fields.select('.fieldWithError').invoke('removeClassName', '.fieldWithError')
+        $A(validation_errors.on).each(function(attr) {
+          var field = this.find_payment_field(attr)
+          if (field) { field.addClassName('fieldWithError') }
+        }, this)
+      }
+      this.errors_div.show()
+    }
+  },
+
+  // Returns an Array of the enabled payment fields (including hidden inputs).
+  // Returns all payment fields if include_disabled is true.
+  get_payment_fields: function(include_disabled) {
+    if (typeof this.all_payment_fields == 'undefined') {
+      this.all_payment_fields = this.payment_fields.select('input','select','textarea')
+    }
+    return include_disabled ?
+      this.all_payment_fields :
+      this.all_payment_fields.findAll(function(e) {
+        return !e.disabled
+      })
+  },
+
+  // Returns an Array of all visible, and enabled payment fields. 
+  get_enabled_visible_payment_fields: function() {
+    return this.get_payment_fields(false).reject(function(e) {
+      return !e.visible() || e.type == 'hidden'
     })
   },
 
-  // Find an enabled payment field by field.id.  (Will prefix 'payment_' if id does not already
-  // include it.)
-  find_payment_field: function(id) {
+  // Find an enabled payment field by field.id.  (Will prefix 'payment_' if id
+  // does not already include it.)
+  // Set include_disabled to true to find any payment field by id.
+  find_payment_field: function(id, include_disabled) {
     id = id.match(/^payment_/) ? id : 'payment_' + id
-    return this.get_payment_fields().detect(function(f) { return f.id == id })
+    return this.get_payment_fields(include_disabled).detect(function(f) { return f.id == id })
   },
 
   // Returns an Array of the enabled submission controls.
@@ -1083,8 +1290,8 @@ Object.extend(Register.UI.prototype, {
     })
   },
 
-  // Find an enabled submission control by field.id.  (Will prefix 'payment_submit_' if id does
-  // not include it.)
+  // Find an enabled submission control by field.id.  (Will prefix
+  // 'payment_submit_' if id does not include it.)
   find_submission_control: function(id) {
     id = id.match(/^payment_submit_/) ? id : 'payment_submit_' + id
     return this.get_submission_controls().detect(function(f) { return f.id == id })
@@ -1104,15 +1311,7 @@ Object.extend(Register.UI.prototype, {
   // Hides or shows and enables or disables payment fields based on the
   // currently selected payment type.
   setup_payment_type_fields: function() {
-    var payment_type = this.get_payment_type()
-    this.root.select('.show-by-type').each(function(e) {
-      e.hide()
-      e.select('input','select','textarea').invoke('disable')
-    })
-    this.root.select('.show-by-type.' + payment_type).each(function(e) {
-      e.select('input','select','textarea').invoke('enable')
-      e.show()
-    })
+    Register.UI.setup_payment_fields_by_type_for(this.root, this.get_payment_type())
   },
 
   set_title: function() {
@@ -1121,8 +1320,11 @@ Object.extend(Register.UI.prototype, {
     return title 
   },
 
-  // Generate and return a set of select options.  One option is generated for each object in
-  // the passed array.
+  // Generate and return a set of select options.  One option is generated for
+  // each object in the passed array.
+  //
+  // * label_method: may be passed a function which in turn will be passed each
+  //   option in the array (for generating custom labels)
   make_options: function(array, value_method, label_method, default_option_values) {
     var default_option, options
     if (default_option_values) {
@@ -1130,7 +1332,9 @@ Object.extend(Register.UI.prototype, {
     } 
     options = $A(array).map(function(o) {
       var value = Object.__send(o, value_method)
-      var label = Object.__send(o, label_method)
+      var label = (typeof label_method == 'function') ?
+        label_method(o) :
+        Object.__send(o, label_method)
       return new Element('option', { value: value }).update(label)
     })
     if (default_option) { options.unshift(default_option) }
@@ -1159,10 +1363,11 @@ Object.extend(Register.UI.prototype, {
 
   serialize: function() {
     var serialized = {}
-    this.form.get_enabled_elements(this.payment_fields).inject(serialized, function(object,field) {
+    this.get_payment_fields().inject(serialized, function(object,field) {
       object[field.name] = field.value
       return object
     })
+    serialized['payment[type]'] = this.get_payment_type()
     serialized[this.successful_submitter.name] = this.successful_submitter.value
     return serialized
   },
@@ -1170,7 +1375,7 @@ Object.extend(Register.UI.prototype, {
   validate: function() {
     var valid = this.ledger.validate()
     this.errors = this.ledger.errors.clone()
-    required = this.form.get_enabled_elements().select(function(e) {
+    required = this.get_enabled_visible_payment_fields().select(function(e) {
       return e.hasClassName('required') && !e.present()
     })
     if (required.size() > 0) {
@@ -1183,9 +1388,9 @@ Object.extend(Register.UI.prototype, {
   // Callback for user choosing an entry in the purchase code select.
   // XXX Is there a good reason to add callbacks around the UI events?  Rather than
   // callbacks around core register events like totals updates?
-  handle_purchase_code_select: function(evnt) {
+  handle_purchase_code_select: function(event) {
     if (this.before_purchase_code_select && !this.before_purchase_code_select()) {
-      evnt.stop()
+      event.stop()
     } else {
       var amount = this.purchase_amount_input.value
       var code_id = this.purchase_codes_select.value
@@ -1201,29 +1406,77 @@ Object.extend(Register.UI.prototype, {
     }
   },
 
+  // If we have not yet begun to process a credit card, and we detect a '%'
+  // while payment type is for a credit card, ensure that focus is on 
+  // the purchase amount input control which has a handler for parsing credit
+  // tracks. 
+  handle_register_card_swipe: function(event) {
+    if (!this.processing_a_credit_card && event.charCode == Register.UI.KEY_PERCENT_SIGN) {
+      var payment_code = this.get_payment_code()
+      if (payment_code.is_credit_card()) {
+        this.processing_a_credit_card = true
+        var current_input = event.findElement()
+        if (current_input != this.purchase_amount_input) {
+          event.stop()
+          this.purchase_amount_input.focus()
+          this.purchase_amount_input.value = '%'
+        }
+      }
+    }
+  },
+
+  // If we are processing a credit card swipe, parse content for valid credit card
+  // track data and place into the payment fields if received.
+  handle_amount_input_changed: function(event) {
+    if (this.processing_a_credit_card) {
+      try {
+        var parser = new CreditCardTrackData(this.purchase_amount_input.value)
+        if (parser.is_minimally_valid()) {
+          this.credit_card_track_one.value = parser.track1.raw
+          this.credit_card_track_two.value = parser.track2.raw
+          this.find_payment_field('credit_card_number').value = parser.number
+          this.find_payment_field('credit_card_month').value = parser.month()
+          this.find_payment_field('credit_card_year').value = parser.year()
+          this.find_payment_field('credit_card_first_name').value = parser.first_name
+          this.find_payment_field('credit_card_last_name').value = parser.last_name
+          this.cc_hide_moto_fields()
+        }
+      } catch(err) {
+        if (typeof(err) == 'string' && err.match(/^CCTD/)) {
+          this.alert_user('Unable to parse credit card, please try swiping it again')
+        } else {
+          throw(err)
+        }
+      } finally {
+        this.processing_a_credit_card = false
+        this.reset_ledger_entry_input_controls()
+      }
+    }
+  },
+
   // Callback for user changing the payment type.
-  handle_payment_code_select: function(evnt) {
+  handle_payment_code_select: function(event) {
     this.setup_payment_type_fields()
     this.ledger.set_payment_code(this.get_payment_code())
   },
 
   // Callback for user changing the amount tendered.
-  handle_amount_tendered_input: function(evnt) {
+  handle_amount_tendered_input: function(event) {
     this.ledger.set_amount_tendered(this.tendered.value)
   },
 
   // Callback for user clicking the cancel control.
-  handle_cancel_control_click: function(evnt) {
-    return this.register.cancel()
+  handle_cancel_control_click: function(event) {
+    return this.register.cancel(event)
   },
 
-  handle_submit_control_clicked: function(evnt) {
-    this.successful_submitter = evnt.findElement()
+  handle_submit_control_clicked: function(event) {
+    this.successful_submitter = event.findElement()
     return true
   },
 
-  handle_form_submit: function(evnt) {
-    evnt.stop()
+  handle_form_submit: function(event) {
+    event.stop()
     if (!this.validate()) {
       var message = "Please correct the following:\n"
       this.errors.each(function(m) {
@@ -1242,7 +1495,7 @@ Object.extend(Register.UI.prototype, {
           return false
         }
       }
-      return this.register.submit()
+      return this.register.submit(event)
     }
     return false
   },
@@ -1251,7 +1504,7 @@ Object.extend(Register.UI.prototype, {
   // * purchase-code select - on change create a ledger row, update totals
   // * payment-type select - on change update register payment state and hide/show
   //   correct payment fields.
-  // * amount-tendered - on change update totals
+  // * amount-tendered - on change parse possible credit card track data 
   // * card swipe - key logger to detect and handle card swipe
   // * tabbing - keep tab cycle within register
   // * submission - validate before submit
@@ -1260,6 +1513,8 @@ Object.extend(Register.UI.prototype, {
     this.initialize_payment_code_controls()     
     this.initialize_amount_tendered_control()
     this.initialize_submission_controls()
+    this.initialize_register_card_swipe()
+    this.initialize_tabbing_controls()
   },
 
   // Attaches onchange callback to UI amount-tendered input to update the ledger.
@@ -1273,9 +1528,11 @@ Object.extend(Register.UI.prototype, {
   },
 
   // Attaches onchange callback to UI payment-type select to change the payment type and
-  // show/hide associated fields.
+  // show/hide associated fields, and to the amount-input control to parse credit card
+  // tracks.
   initialize_payment_code_controls: function() {
     this.payment_codes_select.observe('change', this.handle_payment_code_select.bind(this))
+    this.purchase_amount_input.observe('change', this.handle_amount_input_changed.bind(this))
   },
   
   // Attaches onsubmit callback to UI submission controls, and an onclick callback
@@ -1286,8 +1543,101 @@ Object.extend(Register.UI.prototype, {
     this.get_submission_controls(true).each(function(submit) {
       submit.observe('click', this.handle_submit_control_clicked.bind(this)) 
     }, this)
+    this.form.observe('keypress', this.handle_enter_key_submit.bind(this))
   },
+  
+  initialize_register_card_swipe: function() {
+    this.processing_a_credit_card = false
+    this.form.observe('keypress', this.handle_register_card_swipe.bind(this))
+  },
+
+  // Hide credit card fields only associated with moto transactions.
+  // XXX Clean up hard coded selectors.
+  cc_hide_moto_fields: function() {
+    $('payment_credit_card_verification_value').hide()
+    $$('label[for=payment_credit_card_verification_value]').first().hide()
+    $('payment_credit_card_billing_address').hide()
+    $$('label[for=payment_credit_card_billing_address]').first().hide()
+    $('payment_credit_card_zip_code').hide()
+    $$('label[for=payment_credit_card_zip_code]').first().hide()
+  },
+
+  // With multiple submit buttons, Firefox fails to submit after hitting enter in an input
+  // control if the first submit button is disabled.  So if we have three submit buttons
+  // and the first two are disabled, we can no longer submit by hitting the enter key in an
+  // input control.  So we add keypress observers to the input controls to make up for this.
+  handle_enter_key_submit: function(event) {
+    var current_input = event.findElement()
+    if (event.keyCode == Event.KEY_RETURN && current_input.type == 'text') {
+      event.stop()
+      if (this.processing_a_credit_card) {
+        this.get_enabled_visible_payment_fields().first().focus()
+      } else if (current_input == this.purchase_amount_input && current_input.present()) {
+        this.purchase_codes_select.focus() 
+      } else if (current_input == this.purchase_amount_input || this.get_payment_fields().include(current_input)) {
+        this.get_submission_controls().first().click()
+      }
+    }
+  },
+  
+  // Ensures that tabbing/shift-tabbing circles only within register controls.
+  initialize_tabbing_controls: function() {
+    // register submit catches tab and focuses on amount-input for a closed tabbing loop
+    this.get_submission_controls().last().observe('keypress', function(event) {
+      if (event.keyCode == Event.KEY_TAB && !event.shiftKey) {
+        event.stop()
+        this.purchase_amount_input.activate()
+      }
+    }.bind(this))
+    // register amount-input catches shift-tab and focuses back to payment submit
+    this.purchase_amount_input.observe('keypress', function(event) {
+      if (event.keyCode == Event.KEY_TAB && event.shiftKey) {
+        event.stop()
+        this.get_submission_controls().last().focus()
+      }
+    }.bind(this))
+    // register payment_type catches tab, allows onChange to fire to ensure that
+    // fields are hidden/shown based on payment type, and then moves to the next
+    // input that would be available by payment type
+    this.payment_codes_select.observe('keypress', function(event) {
+      if (event.keyCode == Event.KEY_TAB && !event.shiftKey) {
+        // Allow a moment for the onChange event to complete updates to the 
+        // enabled/disabled fields
+        setTimeout(function() { 
+          this.get_enabled_visible_payment_fields().first().focus()
+        }.bind(this), 100)
+      } 
+    }.bind(this))
+  },
+
+  // Advances focus to the next visible, non-hidden, non-disabled descendant
+  // input, textarea or select element that participates in the tab order in the
+  // current form.  Expects an input, textarea or select element of the form.
+  focus_on_next_field: function(current_control) {
+    var form = current_control.up('form')
+    var controls = form.get_enabled_elements().reject(function(e) { return e.tabIndex <= 0 })
+    controls.sort(function(a,b) { return a.tabIndex > b.tabIndex })
+    var index = controls.indexOf(current_control)
+    var next = controls[index + 1]
+    next.focus()
+  },
+
 })
+// Type Functions
+
+// Utility function hides or shows and enables or disables payment fields in the passed
+// element based on the given payment type.
+Register.UI.setup_payment_fields_by_type_for = function(payment_section, payment_type) {
+  payment_section.select('.show-by-type').each(function(e) {
+    e.hide()
+    e.select('input','select','textarea').invoke('disable')
+  })
+  payment_section.select('.show-by-type.' + payment_type).each(function(e) {
+    e.select('input','select','textarea').invoke('enable')
+    e.show()
+  })
+}
+
 
 // Provides the HTML and events for user interaction with a ledger row in the register.
 Register.UI.Row = function(ui, ledger_row) {
@@ -1403,13 +1753,13 @@ Object.extend(Register.UI.Row.prototype, {
     }, this)
   },
 
-  handle_remove: function(evnt) {
+  handle_remove: function(event) {
     this.ledger_row.destroy()
   },
 
   // Not bound to UI.Row because we want the Input.value and this
   // handle is generic to all the text Input elements in the row.
-  handle_update: function(evnt) {
+  handle_update: function(event) {
     var ui_row = this.ui_row
     var ledger_row = ui_row.ledger_row
     if (this.is_a_credit_or_debit_field) {
@@ -1434,8 +1784,9 @@ Object.extend(Register.UI.Row.prototype, {
 })
 
 /////////////////////////
-// Object Utilities
+/* Object Utilities    */
 /////////////////////////
+
 Object.extend(Object, {
   is_null_or_undefined: function(object) {
     return object === null || typeof(object) == 'undefined'
@@ -1454,7 +1805,7 @@ Object.extend(Object, {
 })
 
 /////////////////////////
-// Array methods 
+/* Array methods       */
 /////////////////////////
 
 // Array Remove - By John Resig (MIT Licensed)

@@ -2,6 +2,9 @@
             <div class="title"></div>
         
             <form id="payment-form" target="#" method="post" class="alert-on-dirty"> 
+
+              <div class="errorExplanation">
+              </div>
         
               <div id="ledger" class="column">
                 <div id="ledger-entry-input-controls">
@@ -57,7 +60,7 @@
                   <div class="headers colored amount-tendered row">
                     <div class="column cell label">Amount Tendered</div>
                     <div class="column amount">
-                      <input id="amount-tendered" type="text" name="amount_tendered" value="0" />
+                      <input id="amount-tendered" type="text" size="10" name="amount_tendered" value="0" />
                     </div>
                   </div>
           
@@ -112,6 +115,12 @@
                     <dd><input class="required" id="payment_scholarship_number" name="payment[scholarship_number]" size="20" tabindex="5" type="text" /></dd>
                   </dl>
                   <dl class="inline show-by-type CreditCard">
+                    <dt></dt><dd>
+                      <input type="hidden" id="payment_credit_card_track_one" name="payment
+[credit_card][track_one]" />
+                      <input type="hidden" id="payment_credit_card_track_two" name="payment
+[credit_card][track_two]" />
+                    </dd>
                     <dt><label for="payment_credit_card_first_name">First name: </label></dt>
                     <dd><input class="required" id="payment_credit_card_first_name" name="payment[credit_card][first_name]" size="20" tabindex="5" type="text" /></dd>
                     <dt><label for="payment_credit_card_last_name">Last name: </label></dt>

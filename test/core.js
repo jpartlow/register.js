@@ -496,14 +496,13 @@ test("register-ledger-payment-updates-change", function() {
 })
 
 test("register-ui-initialization", function() {
-  expect(9)
+  expect(8)
   var ui = this.register.ui.initialize()
   is_instance_of(ui, Register.UI)
   strictEqual(ui.template_source, this.gold.template)
   is_instance_of(ui.register_template, Element, 'ui should initialize a template register element')
   equal(ui.register_template.id, 'register', 'ui element id should be register')
   is_instance_of(ui.ledger_row_template, Element, 'ui should have a ledger row template element')
-  equal(ui.ledger_row_template.id, Register.UI.LEDGER_ROW_TEMPLATE_ID)
   equal(ui.locate(Register.UI.LEDGER_ROW_TEMPLATE_ID, ui.register_template, false), undefined, 'ledger row template should have been removed from main template')
   is_instance_of(ui.root, Element, 'ui should clone a root register element')
   ui.root.update('foo')
@@ -519,7 +518,7 @@ test("register-ui-delegation", function() {
 })
 
 test("register-ui-make-options", function() {
-  expect(17)
+  expect(24)
   var ui = this.register.ui.initialize()
   var pc = this.gold.purchase_codes
   var ex =  [ 
@@ -528,8 +527,15 @@ test("register-ui-make-options", function() {
   ]
   var options = ui.make_options(ui.purchase_codes, 'id', 'label')
   equal_elements(options, ex)
-  var options = ui.make_options(ui.purchase_codes, 'id', 'label', { value: 'default', label: 'Default' })
+  options = ui.make_options(ui.purchase_codes, 'id', 'label', { value: 'default', label: 'Default' })
   ex.unshift(new Element('option', { value: 'default'}).update('Default'))
+  equal_elements(options, ex)
+
+  ex =  [ 
+    new Element('option', { value: pc[0].id }).update(pc[0].code + ' (' + pc[0].label + ')'),
+    new Element('option', { value: pc[1].id }).update(pc[1].code + ' (' + pc[1].label + ')'),
+  ]
+  options = ui.make_options(ui.purchase_codes, 'id', function(o) { return o.code + ' (' + o.label + ')' })
   equal_elements(options, ex)
 })
 
@@ -826,11 +832,11 @@ test("register-ui-credit-totals", function() {
 })
 
 test("register-ui-submit", function() {
-  expect(14)
+  expect(15)
   var ui = this.register.ui.initialize()
   var register = this.register
   var serialized
-  register.on_submit = function(serialized_form) {
+  register.on_submit = function(event, serialized_form) {
     return serialized = serialized_form 
   }
   submit(ui, 'record')
@@ -848,13 +854,40 @@ test("register-ui-submit", function() {
   is_undefined(ui.last_alert)
   deepEqual(serialized, {
     "commit": "Record",
-    "payment[type]": "13",
+    "payment[type]": "Cash",
     "payment[date(1i)]": "2011",
     "payment[date(2i)]": "3",
     "payment[date(3i)]": "29",
     "payment[user_id]": "106",
     "payment[note]": "",
-    "payment[ledger_entries]": [
+    "payment[ledger_entries_attributes][0][type]": "Income",
+    "payment[ledger_entries_attributes][0][account_number]": "4210.000",
+    "payment[ledger_entries_attributes][0][account_name]": "Store Purchase",
+    "payment[ledger_entries_attributes][0][detail]": undefined,
+    "payment[ledger_entries_attributes][0][register_code]": "ST",
+    "payment[ledger_entries_attributes][0][debit]": undefined,
+    "payment[ledger_entries_attributes][0][credit]": 100,
+    "payment[ledger_entries_attributes][0][code_label]": "Store Purchase",
+    "payment[ledger_entries_attributes][0][code_type]": "purchase",
+    "payment[ledger_entries_attributes][1][type]": "Asset",
+    "payment[ledger_entries_attributes][1][account_number]": "1010.000",
+    "payment[ledger_entries_attributes][1][account_name]": "Cash",
+    "payment[ledger_entries_attributes][1][detail]": undefined,
+    "payment[ledger_entries_attributes][1][register_code]": "CA",
+    "payment[ledger_entries_attributes][1][debit]": 100,
+    "payment[ledger_entries_attributes][1][credit]": undefined,
+    "payment[ledger_entries_attributes][1][code_label]": "Cash",
+    "payment[ledger_entries_attributes][1][code_type]": "payment"
+  })
+  deepEqual(register.serialize(), {
+    "commit": "Record",
+    "payment[type]": "Cash",
+    "payment[date(1i)]": "2011",
+    "payment[date(2i)]": "3",
+    "payment[date(3i)]": "29",
+    "payment[user_id]": "106",
+    "payment[note]": "",
+    "ledger_entries_attributes": [
       {
         "type": "Income",
         "account_number": "4210.000",
