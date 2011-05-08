@@ -240,7 +240,7 @@ function GoldData() {
 
   this.adjustment_codes = [
     {
-      id: 30,
+      id: -1,
       code: "CMP",
       label: "Comp",
     },

@@ -392,6 +392,25 @@ Object.extend(Register.Instance.prototype, {
     }) 
   },
 
+  // Facade for adding a purchase line item to the ledger and
+  // ui.
+  add_purchase: function(code_or_code_id, amount) {
+    if (typeof code_or_code_id == 'string') {
+      var code = this.find_code_by('code', code_or_code_id)
+    }
+    return this.ui.add_ledger_row((code ? code.id : code_or_code_id), amount)
+  },
+
+  // Facade for changing the payment code.  Sets the UI payment_codes_select.
+  switch_payment_code_to: function(payment_type) {
+    var payment_code = this.find_code_by('payment_type', payment_type)
+    if (typeof payment_code == 'undefined') { 
+      throw(new Register.Exception.RegisterException('switch_payment_code_to', 'No payment code found for payment_type: "#{payment_type}"', { payment_type: payment_type }))
+    }
+    this.ui.payment_codes_select.value = payment_code.id
+    this.ui.handle_payment_code_select()
+  },
+  
   // Return the cash payment code which should be associated with change.
   // XXX This relies on the payment_type being 'Cash'
   change_code: function() {
@@ -689,7 +708,7 @@ Object.extend(Register.Ledger.prototype, {
       this.__destroy_payment()
     } else {
       if (!this.payment_row()) {
-        if (this.payment_code) {
+        if (this.payment_code && !(this.payment_code instanceof Register.AdjustmentCode)) {
           this.add(Register.LedgerRow.PAYMENT_TYPE, this.payment_code.id, payment)
         }
       } else {
@@ -1138,6 +1157,7 @@ Register.UI = function(register, template) {
   this.purchase_codes = register.purchase_codes
   this.payment_codes = register.payment_codes
   this.credit_codes = register.credit_codes
+  this.adjustment_codes = register.adjustment_codes
   this.template_source = template || ''
 }
 Register.UI.inherits(Register.Core)
@@ -1194,7 +1214,8 @@ Object.extend(Register.UI.prototype, {
       this.credit_card_track_two = this.locate(Register.UI.CREDIT_CARD_TRACK_TWO_ID)
       // populate select controls with codes
       this.purchase_codes_select = this.locate(Register.UI.PURCHASE_CODES_SELECT_ID)
-      this.update_from_array(this.purchase_codes_select,
+      this.update_from_array(
+        this.purchase_codes_select,
         this.make_options(
           this.purchase_codes, 
           'id', 
@@ -1204,7 +1225,17 @@ Object.extend(Register.UI.prototype, {
         true
       )
       this.payment_codes_select = this.locate(Register.UI.PAYMENT_CODES_SELECT_ID)
-      this.update_from_array(this.payment_codes_select, this.make_options(this.payment_codes, 'id', 'label'), true)
+      this.update_from_array(
+        this.payment_codes_select, 
+        this.make_options({
+            Payments: this.payment_codes,
+            Credits: this.credit_codes,
+            Adjustments: this.adjustment_codes,
+          },
+          'id',
+          'label'
+        )
+      )
       // initialize callback functions in the root register so that it will respond to
       // user actions
       this.initialize_register_callbacks()
@@ -1321,22 +1352,40 @@ Object.extend(Register.UI.prototype, {
   },
 
   // Generate and return a set of select options.  One option is generated for
-  // each object in the passed array.
+  // each object in the passed array.  Or if an object is given, optgroups 
+  // are generated for each property, and the property's array value is converted
+  // to options.
   //
+  // * array_or_object: if given an array, converts to options.  If given an object,
+  //   converts each property into an optgroup of options.
   // * label_method: may be passed a function which in turn will be passed each
   //   option in the array (for generating custom labels)
-  make_options: function(array, value_method, label_method, default_option_values) {
+  make_options: function(array_or_object, value_method, label_method, default_option_values) {
     var default_option, options
     if (default_option_values) {
       default_option = new Element('option', { value: default_option_values.value }).update(default_option_values.label)
     } 
-    options = $A(array).map(function(o) {
-      var value = Object.__send(o, value_method)
-      var label = (typeof label_method == 'function') ?
-        label_method(o) :
-        Object.__send(o, label_method)
-      return new Element('option', { value: value }).update(label)
-    })
+    if (array_or_object instanceof Array) {
+      options = $A(array_or_object).map(function(o) {
+        var value = Object.__send(o, value_method)
+        var label = (typeof label_method == 'function') ?
+          label_method(o) :
+          Object.__send(o, label_method)
+        return new Element('option', { value: value }).update(label)
+      })
+    } else {
+      options = $A([])
+      var opt_group
+      for (opt_group in array_or_object) {
+        options.push(
+          this.update_from_array(
+            new Element('optgroup', { label: opt_group }),
+            this.make_options(array_or_object[opt_group], value_method, label_method),
+            true
+          )
+        )
+      }
+    }
     if (default_option) { options.unshift(default_option) }
     return options
   },

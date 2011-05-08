@@ -518,9 +518,10 @@ test("register-ui-delegation", function() {
 })
 
 test("register-ui-make-options", function() {
-  expect(24)
+  expect(31)
   var ui = this.register.ui.initialize()
   var pc = this.gold.purchase_codes
+  var cr = this.gold.credit_codes
   var ex =  [ 
     new Element('option', { value: pc[0].id }).update(pc[0].label),
     new Element('option', { value: pc[1].id }).update(pc[1].label),
@@ -537,21 +538,36 @@ test("register-ui-make-options", function() {
   ]
   options = ui.make_options(ui.purchase_codes, 'id', function(o) { return o.code + ' (' + o.label + ')' })
   equal_elements(options, ex)
+
+   
+  ex =  [ 
+    new Element('optgroup', { label: 'Purchases' }).insert(
+      new Element('option', { value: pc[0].id }).update(pc[0].label)
+    ).insert(
+      new Element('option', { value: pc[1].id }).update(pc[1].label)
+    ),
+    new Element('optgroup', { label: 'Credits' }).insert(
+      new Element('option', { value: cr[0].id }).update(cr[0].label)
+    ).insert(
+      new Element('option', { value: cr[1].id }).update(cr[1].label)
+    ),
+  ]
+  options = ui.make_options({ Purchases: ui.purchase_codes, Credits: ui.credit_codes }, 'id', 'label')
+  equal_elements(options, ex)
 })
 
 test("register-ui-select-options", function() {
   expect(2)
   var ui = this.register.ui.initialize()
   var pc = this.gold.purchase_codes
-  var py = this.gold.payment_codes
 
   var ac = ui.purchase_codes_select.childElements()
-  var message = "Expected " + pc.length + 1 + " options but found " + ac.inspect()
+  var message = "Expected " + (pc.length + 1) + " options but found " + ac.inspect()
   equal(ac.length, pc.length + 1, message)
 
   var ac = ui.payment_codes_select.childElements()
-  var message = "Expected " + py.length + " options but found " + ac.inspect()
-  equal(ac.length, py.length, message)
+  var message = "Expected 3 optgroups but found " + ac.inspect()
+  equal(ac.length, 3, message)
 })
 
 test("register-ui-initialize-purchase-code", function() {
