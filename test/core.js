@@ -556,6 +556,16 @@ test("register-ui-make-options", function() {
   equal_elements(options, ex)
 })
 
+test("register-ui-initialize-with-payment", function() {
+  expect(5)
+  var ui = this.register.ui.initialize()
+  $H(this.gold.payment).each(function(args) {
+    var k = args[0]
+    var v = args[1]
+    equal(this.gold.payment[k], ui.find_payment_field(k, true).value)
+  }, this)
+})
+
 test("register-ui-select-options", function() {
   expect(2)
   var ui = this.register.ui.initialize()

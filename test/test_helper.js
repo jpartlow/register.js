@@ -246,7 +246,13 @@ function GoldData() {
     },
   ]
 
-  this.payment = { }
+  this.payment = {
+    credit_card_first_name: 'Foo',
+    credit_card_last_name: 'Bar',
+    credit_card_billing_address: '123 Street',
+    credit_card_zip_code: '12345',
+    check_phone: '123-456-7890',
+  }
 
   this.ledger = [
     {
@@ -297,6 +303,7 @@ GoldData.prototype = {
       payment_codes: this.payment_codes,
       adjustment_codes: this.adjustment_codes,
       credit_codes: this.credit_codes,
+      payment: this.payment,
       template: this.template,
     }
   },

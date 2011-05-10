@@ -1,7 +1,7 @@
 /* This file is part of register.js.  Copyright 2011 Joshua Partlow.  This program is free software, licensed under the terms of the GNU General Public License.  Please see the LICENSE file in this distribution for more information, or see http://www.gnu.org/copyleft/gpl.html. */
 
 var Register = {
-  version: '0.1.0',
+  version: '0.1.1',
   debug: false,
   registers: $H(),
 
@@ -1142,9 +1142,21 @@ Object.extend(Register.LedgerRow.prototype, {
 // General information about the payment.
 Register.Payment = function(register, config) {
   this.register = register
-  this.config = config || {}
+  this.initialize(config)
 }
 Register.Payment.inherits(Register.Core)
+Object.extend(Register.Payment.prototype, {
+  initialize: function(config) {
+    this.config = config || {}
+    this.fields = $A([])
+    var prop
+    for (prop in config) {
+      this.fields.push(prop)
+      this[prop] = config[prop]
+    }
+    this.read_only = this.id ? true : false
+  }
+})
 
 /////////////////////
 /* Register.UI     */
@@ -1236,6 +1248,7 @@ Object.extend(Register.UI.prototype, {
           'label'
         )
       )
+      this.set_from_payment()
       // initialize callback functions in the root register so that it will respond to
       // user actions
       this.initialize_register_callbacks()
@@ -1343,6 +1356,17 @@ Object.extend(Register.UI.prototype, {
   // currently selected payment type.
   setup_payment_type_fields: function() {
     Register.UI.setup_payment_fields_by_type_for(this.root, this.get_payment_type())
+  },
+
+  // Sets payment field values from register.payment.
+  set_from_payment: function() {
+    var payment = this.register.payment
+    payment.fields.each(function(field_name) {
+      var input = this.find_payment_field(field_name, true)
+      if (input) {
+        input.value = payment[field_name]
+      }
+    }, this)
   },
 
   set_title: function() {
