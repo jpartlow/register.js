@@ -1559,7 +1559,7 @@ Object.extend(Register.UI.prototype, {
     } else {
       // double-check authorization or record calls for credit cards.
       if (this.successful_submitter.value == 'Authorize') {
-        if (!confirm("Authorizing will put a temporary hold in the amount of " + this.monetize(this.ledger.get_amount_tendered(), true) + " on the guest's credit card.  No funds will be transferred.  You may capture the funds later in a separate transaction.  Continue?")) {
+        if (!confirm("Authorizing will put a temporary hold in the amount of " + this.monetize(this.ledger.get_amount_tendered_or_credited(), true) + " on the guest's credit card.  No funds will be transferred.  You may capture the funds later in a separate transaction.  Continue?")) {
           return false
         }
       }
