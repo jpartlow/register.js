@@ -1179,6 +1179,8 @@ Register.UI.AMOUNT_CREDITED_ROW_SELECTOR = '.amount-credited.row'
 Register.UI.AMOUNT_TENDERED_ID = 'amount-tendered'
 Register.UI.AMOUNT_TENDERED_ROW_SELECTOR = '.amount-tendered.row'
 Register.UI.CANCEL_CONTROL_SELECTOR = '.cancel-control a'
+Register.UI.CC_INPUT = 'cc-input-popup'
+Register.UI.CC_INPUT_AREA = 'cc-input'
 Register.UI.CHANGE_DUE_ID = 'change-due'
 Register.UI.CREDIT_CARD_TRACK_ONE_ID = 'payment_credit_card_track_one'
 Register.UI.CREDIT_CARD_TRACK_TWO_ID = 'payment_credit_card_track_two'
@@ -1224,6 +1226,8 @@ Object.extend(Register.UI.prototype, {
       this.cancel_control = this.locate(Register.UI.CANCEL_CONTROL_SELECTOR)
       this.credit_card_track_one = this.locate(Register.UI.CREDIT_CARD_TRACK_ONE_ID)
       this.credit_card_track_two = this.locate(Register.UI.CREDIT_CARD_TRACK_TWO_ID)
+      this.credit_card_input_popup = this.locate(Register.UI.CC_INPUT)
+      this.credit_card_input = this.locate(Register.UI.CC_INPUT_AREA)
       // populate select controls with codes
       this.purchase_codes_select = this.locate(Register.UI.PURCHASE_CODES_SELECT_ID)
       this.update_from_array(
@@ -1258,6 +1262,7 @@ Object.extend(Register.UI.prototype, {
       // set visible payment fields
       // set ledger payment code to first available
       this.handle_payment_code_select()
+      this.cc_hide_and_disable_input()
     }
     return this
   },
@@ -1487,23 +1492,22 @@ Object.extend(Register.UI.prototype, {
     if (!this.processing_a_credit_card && event.charCode == Register.UI.KEY_PERCENT_SIGN) {
       var payment_code = this.get_payment_code()
       if (payment_code.is_credit_card()) {
+        event.stop()
         this.processing_a_credit_card = true
-        var current_input = event.findElement()
-        if (current_input != this.purchase_amount_input) {
-          event.stop()
-          this.purchase_amount_input.focus()
-          this.purchase_amount_input.value = '%'
-        }
+        this.credit_card_input.enable()
+        this.credit_card_input.value = '%'
+        this.credit_card_input_popup.show()
+        this.credit_card_input.focus()
       }
     }
   },
 
   // If we are processing a credit card swipe, parse content for valid credit card
   // track data and place into the payment fields if received.
-  handle_amount_input_changed: function(event) {
+  handle_credit_card_input: function(event) {
     if (this.processing_a_credit_card) {
       try {
-        var parser = new CreditCardTrackData(this.purchase_amount_input.value)
+        var parser = new CreditCardTrackData(this.credit_card_input.value)
         if (parser.is_minimally_valid()) {
           this.credit_card_track_one.value = parser.track1.raw
           this.credit_card_track_two.value = parser.track2.raw
@@ -1522,7 +1526,7 @@ Object.extend(Register.UI.prototype, {
         }
       } finally {
         this.processing_a_credit_card = false
-        this.reset_ledger_entry_input_controls()
+        this.cc_hide_and_disable_input()
       }
     }
   },
@@ -1601,11 +1605,9 @@ Object.extend(Register.UI.prototype, {
   },
 
   // Attaches onchange callback to UI payment-type select to change the payment type and
-  // show/hide associated fields, and to the amount-input control to parse credit card
-  // tracks.
+  // show/hide associated fields.
   initialize_payment_code_controls: function() {
     this.payment_codes_select.observe('change', this.handle_payment_code_select.bind(this))
-    this.purchase_amount_input.observe('change', this.handle_amount_input_changed.bind(this))
   },
   
   // Attaches onsubmit callback to UI submission controls, and an onclick callback
@@ -1622,6 +1624,14 @@ Object.extend(Register.UI.prototype, {
   initialize_register_card_swipe: function() {
     this.processing_a_credit_card = false
     this.form.observe('keypress', this.handle_register_card_swipe.bind(this))
+    this.credit_card_input.observe('change', this.handle_credit_card_input.bind(this))
+  },
+
+  cc_hide_and_disable_input: function() {
+    this.credit_card_input_popup.hide()
+    this.credit_card_input.value = ''
+    this.credit_card_input.disable()
+    return this.credit_card_input_popup
   },
 
   // Hide credit card fields only associated with moto transactions.
@@ -1635,10 +1645,11 @@ Object.extend(Register.UI.prototype, {
     $$('label[for=payment_credit_card_zip_code]').first().hide()
   },
 
-  // With multiple submit buttons, Firefox fails to submit after hitting enter in an input
-  // control if the first submit button is disabled.  So if we have three submit buttons
-  // and the first two are disabled, we can no longer submit by hitting the enter key in an
-  // input control.  So we add keypress observers to the input controls to make up for this.
+  // With multiple submit buttons, Firefox fails to submit after hitting enter
+  // in an input control if the first submit button is disabled.  So if we have
+  // three submit buttons and the first two are disabled, we can no longer
+  // submit by hitting the enter key in an input control.  So we add keypress
+  // observers to the input controls to make up for this.
   handle_enter_key_submit: function(event) {
     var current_input = event.findElement()
     if (event.keyCode == Event.KEY_RETURN && current_input.type == 'text') {

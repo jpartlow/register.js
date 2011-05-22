@@ -698,6 +698,13 @@ test("register-ui-sets-title", function() {
   equal(ui.root.down('.title').textContent, 'New Payment')
 })
 
+test("register-ui-cc-input", function() {
+  expect(2)
+  var ui = this.register.ui.initialize()
+  ok(!ui.credit_card_input_popup.visible()) 
+  ok(ui.credit_card_input.disabled)
+})
+
 test("register-ui-get-payment-type", function() {
   expect(2)
   var py = this.gold.payment_codes[0]

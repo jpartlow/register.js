@@ -103,7 +103,11 @@
                 </div>
           
               </div>
-          
+         
+              <div id="cc-input-popup" class="popup">
+                <input id="cc-input" name="cc_input_area" tabindex="-1" type="text" size="100" />
+              </div>
+ 
               <div id="payment-fields" class="column">
          
                 <div id="payment-controls"> 
@@ -359,7 +363,7 @@
         container.update(register.root())
       }) 
 
-      function handle_test_submission(serialized) {
+      function handle_test_submission(event, serialized) {
         payments.push(serialized)
         var payment = Object.clone(serialized)
         var rows = $A(payment['payment[ledger_entries]']).clone()
