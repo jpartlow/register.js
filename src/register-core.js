@@ -1235,7 +1235,7 @@ Object.extend(Register.UI.prototype, {
         this.make_options(
           this.purchase_codes, 
           'id', 
-          function(o) { return o.code + " (" + o.label + ")" }, 
+          function(o) { return o.code + " (" + o.label.truncate(35) + ")" }, 
           { value: Register.UI.PURCHASE_CODES_SELECT_BLANK_VALUE, label: '- Select a code -' }
         ),
         true
