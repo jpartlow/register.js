@@ -946,3 +946,60 @@ test("register-ui-submit", function() {
     ],
   })
 })
+
+module("register-existing-payment", {
+  setup: function() {
+    this.gold = new GoldData()
+    this.config = this.gold.edit_payment_register_config()
+    this.config.payment = {
+      'id' : 1
+    }
+    this.register = new Register.Instance(this.config)
+    this.ui = this.register.ui.initialize()
+    this.ledger = this.register.ledger
+  },
+})
+
+test("register-ui-shows-existing-ledger", function() {
+  expect(1)
+  equal(this.ui.rows.size(), this.ledger.change_rows('old').size() + this.ledger.purchase_rows('old').size())
+})
+
+test("register-ui-existing-ledger-read-only", function() {
+  expect(this.ui.rows.size())
+  this.ui.rows.each(function(row) {
+    equal(row.read_only(), true)
+  })
+})
+
+test("register-ui-subtotals-for-existing-ledger", function() {
+  expect(1)
+})
+
+test("register-validates-cannot-refund-more-than-payment", function() {
+  expect(1)
+})
+
+test("register-payment-fields-disabled-for-partial-refund", function() {
+  expect(1)
+})
+
+test("register-ui-date-user-not-set-from-previous-payment-for-partial-refund", function() {
+  expect(1)
+})
+
+test("register-ui-amount-tendered-disabled-for-existing-payment", function() {
+  expect(1)
+  equal(this.ui.tendered.disabled, true)
+})
+
+test("register-ui-credit-card-swipe-handler-disabled-for-partial-refund", function() {
+  expect(1)
+  var ran = 'no'
+  Register.UI.prototype.initialize_register_card_swipe = function() {
+    ran = 'yes'
+  }
+  var register = new Register.Instance(this.config)
+  var ui = register.ui.initialize()
+  equal(ran, 'no')
+})

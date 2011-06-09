@@ -5,7 +5,10 @@
     <link rel="stylesheet" type="text/css" href="../html/sample.css" />
     <script type="text/javascript" src="../lib/prototype.js"></script>
     <script type="text/javascript" src="../lib/credit_card_track_parser.js"></script>
+    <script type="text/javascript" src="../src/register-util.js"></script>
     <script type="text/javascript" src="../src/register-core.js"></script>
+    <script type="text/javascript" src="../src/register-ledger.js"></script>
+    <script type="text/javascript" src="../src/register-ui.js"></script>
     <script type="text/javascript" src="test_helper.js"></script>
   </head>
   <body>
@@ -49,7 +52,7 @@
                     <div class="column cell center detail">Details</div>
                     <hr />
                   </div>
-        
+       
                   <div id="ledger-entry-row-template" class="ledger-entry row">
                     <div class="column cell center label" ></div>
                     <div class="column cell debit" >
@@ -329,9 +332,12 @@
     <div id="test-payments">
       <h1>Payments</h1>
       <div id="test-payment-template">
+        <h2>Payment</h2>
         <div class="column ledger-entries">
+          <h3>Ledger</h3>
           <table>
             <tr>
+              <th>id</th>
               <th>type</th>
               <th>account_number</th>
               <th>account_name</th>
@@ -345,9 +351,19 @@
           </table>
         </div>
         <div class="column payment-fields">
+          <h3>Fields</h3>
+          <table>
+            <tr>
+              <th>field</th>
+              <th>value</th>
+            </tr>
+          </table>
         </div>
+        <hr />
         <div class="controls">
+          <a href="#" class="update">Update</a>
         </div>
+        <hr class="subtle" />
       </div>
     </div>
     <script type="text/javascript">
@@ -357,31 +373,81 @@
 
       $('create-register').observe('click', function(evnt) {
         evnt.stop()
-        var register = Register.create(gold.new_payment_register_config())
+        create(gold.new_payment_register_config())
+      }) 
+    
+      function create(config) {
+        var register = Register.create(config)
         register.on_submit = handle_test_submission
         var container = $('new-register')
         container.update(register.root())
-      }) 
+      } 
 
       function handle_test_submission(event, serialized) {
-        payments.push(serialized)
-        var payment = Object.clone(serialized)
-        var rows = $A(payment['payment[ledger_entries]']).clone()
-        delete payment['payment[ledger_entries]']
+        var record = {
+          serialized: Object.clone(serialized),
+          payment: null,
+          ledger: null, 
+        }
+        payments.push(record)
+        var id = payments.size()
+
+        // recreate ledger objects
+        record.ledger = $H(record.serialized).grep(/payment\[ledger_entries_attributes]/).inject($H({}), function(hash,row) {
+          var keys = row[0].match(/\[(\d)]\[(.+)]$/)
+          var row_count = keys[1]
+          var field = keys[2]
+          var obj = hash.get(row_count) || hash.set(row_count, { 'id' : row_count })
+          var value = row[1]
+          obj[field] = value
+          return hash 
+        }).toArray().sort().map(function(entry) { return entry[1] })
+
+        // recreate payment fields
+        record.payment = $H(record.serialized).select(function(entry) { 
+          return entry[0].match(/^payment\[[^\]]+]$/) 
+        }).inject($H({}), function(hash,entry) {
+          var keys = entry[0].match(/^payment\[(.+)]$/)
+          hash.set(keys[1], entry[1])
+          return hash
+        })
+        record.payment.set('id', id)
 
         var payment_div = gold.payment_template.cloneNode(true)
-        payment_div.down('.payment-fields').update(Object.toJSON(payment))
-        var ledger_table = payment_div.down('.ledger-entries table')
-        rows.each(function(row) {
+        var payment_fields = payment_div.down('.payment-fields')
+        var ledger_entries = payment_div.down('.ledger-entries')
+        payment_div.down('h2').update("Payment " + id)
+ 
+        var payment_fields_table = payment_fields.down('table')
+        record.payment.each(function(field) {
+          var tr = new Element('tr')
+          tr.insert(new Element('td').update(field[0]))
+          tr.insert(new Element('td').update(field[1]))
+          payment_fields_table.insert(tr)
+        })
+
+        var ledger_table = ledger_entries.down('table')
+        record.ledger.each(function(row) {
           var tr = new Element('tr')
           for (var prop in row) {
-// var ['type', 'account_number', 'account_name', 'detail', 'register_code', 'debit', 'credit', 'code_label', 'code_type'].each(function(prop) {
             tr.insert(new Element('td').update(row[prop]))
           }
           ledger_table.insert(tr)
         })
+
+        payment_div.down('a.update').observe('click', update.bind(record))
+
         $('test-payments').insert(payment_div)
-        this.cancel()
+                
+        Register.destroy(this)
+      }
+
+      function update(evnt) {
+        evnt.stop()
+        config = gold.edit_payment_register_config()
+        config['payment'] = this.payment.toObject()
+        config['ledger'] = this.ledger.toArray()
+        create(config)
       }
       
       // ]]>

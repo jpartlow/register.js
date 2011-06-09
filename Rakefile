@@ -15,3 +15,16 @@ namespace :erb do
     end    
   end
 end
+
+desc "Generate single register.js for distribution"
+task :dist do
+  output_file = File.open("register.js", "w")
+  %w{ register-core.js register-ledger.js register-ui.js register-util.js}.each do |file_name|
+    file = File.open("src/#{file_name}")
+    source = file.readlines
+    source.shift unless file_name == 'register-core.js' # shift off the copyright
+    output_file << source 
+    output_file << "\n"  
+  end
+  output_file.close
+end

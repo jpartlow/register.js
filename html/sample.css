@@ -72,3 +72,17 @@ dl.inline dd {
   float: left;
   margin-top: 3px;
 }
+#test-payments th {
+  text-align: center;
+  background-color: gray;
+}
+#test-payments th,
+#test-payments td {
+  padding: 1px 3px;
+}
+#test-payments td {
+  background-color: lavender;
+}
+.payment-fields pre {
+  margin-top: 2em;
+}
