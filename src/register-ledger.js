@@ -20,7 +20,7 @@ Object.extend(Register.Payment.prototype, {
       this[prop] = config[prop]
     }
     this.new = this.id ? false : true
-  }
+  },
 
   // Returns true if this is a new payment that has not been saved
   // server side yet.  Otherwise we are making an update to an existing

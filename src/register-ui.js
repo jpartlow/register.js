@@ -223,7 +223,7 @@ Object.extend(Register.UI.prototype, {
   // (if we are updating a previous payment).  Also disables amount tendered input if
   // we are updating a previous payment.
   set_ledger_history: function() {
-    if (this.is_refund()) {
+    if (!this.is_new()) {
       this.ledger.get_rows('old').each(function(row) {
         if (!row.is_payment()) {
           this.add_ledger_history_row(row)
@@ -235,11 +235,11 @@ Object.extend(Register.UI.prototype, {
 
   // True if we are creating a new payment.
   is_new: function() {
-    return this.register.payment.is_new()
+    return this.register.is_new()
   },
 
   set_title: function() {
-    var title = this.register.is_new() ? "New Payment" : "Payment #" + this.register.id()
+    var title = this.is_new() ? "New Payment" : "Payment #" + this.register.id()
     this.root.down('.title').update(title)
     return title 
   },
@@ -462,7 +462,7 @@ Object.extend(Register.UI.prototype, {
     this.initialize_payment_code_controls()     
     this.initialize_amount_tendered_control()
     this.initialize_submission_controls()
-    if (!this.is_refund()) {
+    if (this.is_new()) {
       this.initialize_register_card_swipe()
     }
     this.initialize_tabbing_controls()
@@ -688,9 +688,10 @@ Object.extend(Register.UI.Row.prototype, {
     this.get_controls().invoke('disable')
   },
 
-  // True if this row reflects a read only ledger row.
-  read_only: function() {
-    return !this.ledger_row.is_new()
+  // True if this row reflects a newly created ledger row that may be edited or
+  // destroyed.
+  is_new: function() {
+    return this.ledger_row.is_new()
   },
 
   // Setup the event callbacks for the row's controls.

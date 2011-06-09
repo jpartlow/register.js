@@ -968,7 +968,7 @@ test("register-ui-shows-existing-ledger", function() {
 test("register-ui-existing-ledger-read-only", function() {
   expect(this.ui.rows.size())
   this.ui.rows.each(function(row) {
-    equal(row.read_only(), true)
+    equal(row.is_new(), false)
   })
 })
 
