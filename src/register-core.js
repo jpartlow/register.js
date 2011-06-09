@@ -556,6 +556,10 @@ Object.extend(Register.Code.prototype, {
   is_credit_card: function() {
     return this.payment_type == 'CreditCard'
   },
+
+  toString: function() {
+    return "[" + this.code + ":" + this.label + "]"
+  },
 })
 // Subtypes
 Register.PurchaseCode = function(config) {

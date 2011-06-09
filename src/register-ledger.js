@@ -22,12 +22,17 @@ Object.extend(Register.Payment.prototype, {
     this.new = this.id ? false : true
   },
 
+  // Returns the payment Register.Code matching our type.
+  code: function() {
+    return this.register.find_code_by('payment_type', this.type) 
+  },
+ 
   // Returns true if this is a new payment that has not been saved
   // server side yet.  Otherwise we are making an update to an existing
   // payment.
   is_new: function() {
     return this.new
-  }
+  },
 })
 
 /////////////////////
@@ -294,9 +299,44 @@ Object.extend(Register.Ledger.prototype, {
     }).toArray()
   },
 
+  // True if we are reversing an existing payment, and there are old rows in
+  // the ledger that we have to balance against.
+  reversing: function() {
+    return this.get_rows('old').length > 0
+  },
+
+  // If we are reversing an existing payment, each new row must be less
+  // than or equal to the reverse of existing rows.
+  validate_reversal: function() {
+    var errors = $A([])
+    var indexer = function(hash, row) {
+      var array = hash.get(row.register_code) || hash.set(row.register_code, $A([]))
+      array.push(row)
+      return hash
+    }
+    var old_indexed = this.get_rows('old').inject($H({}), indexer)
+    var new_indexed = this.get_rows('new').inject($H({}), indexer)
+    
+    new_indexed.each(function(entry) {
+      var code = entry[0]
+      var new_rows = entry[1]
+      var old_rows = old_indexed.get(code)
+      if (!old_rows) {
+        errors.push('there was no code ' + code + ' in the original payment')
+      } else if (
+        (old_rows.sum('get_debit') < new_rows.sum('get_credit')) ||
+        (old_rows.sum('get_credit') < new_rows.sum('get_debit'))
+      ) {
+        errors.push('you cannot reverse more than the original payment for ' + code)
+      }
+    }, this) 
+    return errors
+  },
+
   // Checks that register is in a valid state.
   // * debits and credits must balance
   // * change cannot be negative
+  // * new totals must balance against old totals if we are updating an existing payment
   // * amount tendered must be positive for payment
   // * amount credited must be positive for credit
   // * payment and change must be zero for adjustment
@@ -312,7 +352,9 @@ Object.extend(Register.Ledger.prototype, {
     if ( change < 0 ) {
       this.errors.push('you may not return negative change...')
     }
-    if (this.payment_code instanceof Register.PaymentCode) {
+    if (this.reversing()) {
+      this.errors.concat(this.validate_reversal())
+    } else if (this.payment_code instanceof Register.PaymentCode) {
       if (tendered <= 0) {
         this.errors.push('amount tendered must be positive for a payment')
       }
@@ -332,7 +374,7 @@ Object.extend(Register.Ledger.prototype, {
       this.errors.push('no purchase codes have been entered')
     }
     return this.errors.length == 0
-  }
+  },
 
 })
 
@@ -357,7 +399,8 @@ Object.extend(Register.Ledger.prototype, {
 //   account)
 // * debit: debit amount
 // * credit: credit amount
-// * code_label: the longhand label associated with the Register.Code that generated this row
+// * code_label: the longhand label associated with the Register.Code that
+//   generated this row
 // * code_type: purchase, payment or change
 //
 // NOTE: Only debit or credit should have a value, not both.  

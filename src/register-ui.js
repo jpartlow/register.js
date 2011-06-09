@@ -196,6 +196,12 @@ Object.extend(Register.UI.prototype, {
     return this.register.find_code(this.payment_codes_select.value)
   },
 
+  // Sets the value of the payment_codes_select control if given 
+  // a Register.PaymentCode.
+  set_payment_code: function(code) {
+    return this.payment_codes_select.setValue(code.id)
+  },
+
   // Returns the current payment_type string value as determined by the setting
   // of the payment-type select control.
   get_payment_type: function() {
@@ -204,8 +210,18 @@ Object.extend(Register.UI.prototype, {
 
   // Hides or shows and enables or disables payment fields based on the
   // currently selected payment type.
+  //
+  // If this register is reversing an existing payment, all fields except
+  // user, date and notes will be disabled.
   setup_payment_type_fields: function() {
     Register.UI.setup_payment_fields_by_type_for(this.root, this.get_payment_type())
+    if (!this.is_new()) {
+      this.get_payment_fields().each(function(field) {
+        if (!field.id.match(/payment_(user|note|date)/)) {
+          field.disable()
+        }
+      })
+    }
   },
 
   // Sets payment field values from register.payment.
@@ -214,9 +230,16 @@ Object.extend(Register.UI.prototype, {
     payment.fields.each(function(field_name) {
       var input = this.find_payment_field(field_name, true)
       if (input) {
-        input.value = payment[field_name]
+        // Do not set user_id, date from previous payment 
+        if (this.is_new() || !input.id.match('payment_(date|user_id)')) {
+          input.setValue(payment[field_name])
+        }
       }
     }, this)
+    if (!this.is_new()) {
+      // payment type needs to be set by code.id
+      this.set_payment_code(payment.code())
+    }
   },
 
   // Creates read only ledger row history from any existing ledger purchase or change rows

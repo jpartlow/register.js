@@ -201,7 +201,19 @@ test("register-code-subtypes", function() {
   ok( cr instanceof Register.Code)
   ok( aj instanceof Register.AdjustmentCode)
   ok( aj instanceof Register.Code)
-}),
+})
+
+test("register-code-to-string", function() {
+  expect(4)
+  var pc = new Register.PurchaseCode(this.gold.purchase_codes[0])
+  var py = new Register.PaymentCode(this.gold.payment_codes[0])
+  var cr = new Register.CreditCode(this.gold.credit_codes[0])
+  var aj = new Register.AdjustmentCode(this.gold.adjustment_codes[0])
+  equal(pc.toString(), "[ST:Store Purchase]")
+  equal("code: " + py, "code: [CA:Cash]")
+  equal(cr.toString(), "[CVTC:Issue Credit Voucher]")
+  equal(aj.toString(), "[CMP:Comp]")
+})
 
 module("register-new-payment", {
   setup: function() {
@@ -947,17 +959,40 @@ test("register-ui-submit", function() {
   })
 })
 
+test("register-ui-set-payment-code", function() {
+  expect(2)
+  var ui = this.register.ui.initialize()
+  var ca = this.gold.payment_codes[0]
+  var ch = this.gold.payment_codes[2] 
+  equal(ui.payment_codes_select.getValue(), ca.id)
+  ui.set_payment_code(ch) 
+  equal(ui.payment_codes_select.getValue(), ch.id)
+})
+
 module("register-existing-payment", {
   setup: function() {
     this.gold = new GoldData()
     this.config = this.gold.edit_payment_register_config()
     this.config.payment = {
-      'id' : 1
+      'id' : 1,
+      'type' : 'Cash',
     }
     this.register = new Register.Instance(this.config)
     this.ui = this.register.ui.initialize()
     this.ledger = this.register.ledger
   },
+})
+
+test("register-payment-payment-code", function() {
+  expect(2)
+  var payment = this.register.payment
+  equal(payment.type, 'Cash')
+  deepEqual(payment.code(), new Register.PaymentCode(this.gold.payment_codes[0], payment.code()))
+})
+
+test("register-ledger-reversing", function() {
+  expect(1)
+  ok(this.ledger.reversing())
 })
 
 test("register-ui-shows-existing-ledger", function() {
@@ -972,20 +1007,80 @@ test("register-ui-existing-ledger-read-only", function() {
   })
 })
 
-test("register-ui-subtotals-for-existing-ledger", function() {
-  expect(1)
+test("register-validates-cannot-refund-more-than-payment", function() {
+  expect(5)
+  var st = this.gold.purchase_codes[0]
+  var pr = this.gold.purchase_codes[1]
+  var ledger_st = this.gold.ledger[2]
+  var amount = ledger_st.credit
+  equal(st.code, ledger_st.register_code)
+
+  var errors = this.ledger.validate_reversal()
+  equal(errors.length, 0)
+
+  row = this.ledger.add_purchase(pr.id, -amount)
+
+  errors = this.ledger.validate_reversal()
+  equal(errors.length, 1)
+
+  row.destroy()
+  row = this.ledger.add_purchase(st.id, amount)
+
+  errors = this.ledger.validate_reversal()
+  equal(errors.length, 2)
+
+  row.destroy()
+  row = this.ledger.add_purchase(st.id, -amount)
+
+  errors = this.ledger.validate_reversal()
+  equal(errors.length, 0)
 })
 
-test("register-validates-cannot-refund-more-than-payment", function() {
+test("register-existing-payment-sets-payment-type", function() {
   expect(1)
+  this.config.payment = {
+    'id' : 1,
+    'type' : 'CreditCard',
+  }
+  this.register = new Register.Instance(this.config)
+  this.ui = this.register.ui.initialize()
+  this.ledger = this.register.ledger
+  equal(this.ui.get_payment_type(), 'CreditCard')
 })
 
 test("register-payment-fields-disabled-for-partial-refund", function() {
-  expect(1)
+  expect(6)
+  this.config.payment = {
+    'id' : 1,
+    'type' : 'CreditCard',
+  }
+  this.register = new Register.Instance(this.config)
+  this.ui = this.register.ui.initialize()
+  this.ledger = this.register.ledger
+  // Should just return date, user, notes
+  equal(this.ui.get_payment_fields().length, 5)
+  this.ui.get_payment_fields().each(function(field) {
+    matches(field.id, /payment_(user|note|date)/)
+  })
 })
 
 test("register-ui-date-user-not-set-from-previous-payment-for-partial-refund", function() {
-  expect(1)
+  expect(2)
+  this.config.payment = {
+    'id' : 1,
+    'type' : 'CreditCard',
+    'date_1i' : '2010',
+    'date_2i' : '1',
+    'date_3i' : '31',
+    'user_id' : '1'
+  }
+  this.register = new Register.Instance(this.config)
+  this.ui = this.register.ui.initialize()
+  this.ledger = this.register.ledger
+  ok(this.ui.find_payment_field('date_1i').value != '2010')
+//  ok(this.ui.find_payment_field('date_2i').value != '1') // fails in January
+//  ok(this.ui.find_payment_field('date_3i').value != '31') // fails 1/31
+  equal(this.ui.find_payment_field('user_id').value, '')
 })
 
 test("register-ui-amount-tendered-disabled-for-existing-payment", function() {
