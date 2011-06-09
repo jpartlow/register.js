@@ -19,10 +19,11 @@ end
 desc "Generate single register.js for distribution"
 task :dist do
   output_file = File.open("register.js", "w")
-  %w{ register-core.js register-ledger.js register-ui.js register-util.js}.each do |file_name|
+  # Order is important - register-util is needed before register-core...
+  %w{ register-util.js register-core.js register-ledger.js register-ui.js }.each_with_index do |file_name, i|
     file = File.open("src/#{file_name}")
     source = file.readlines
-    source.shift unless file_name == 'register-core.js' # shift off the copyright
+    source.shift unless i == 0 # shift off the copyright
     output_file << source 
     output_file << "\n"  
   end
