@@ -74,17 +74,6 @@ var Register = {
   hide_spinner: null,
 }
 
-////////////////////////
-/* Simple Inheritance */
-////////////////////////
-
-Function.prototype.inherits = function(parent_function) { 
-  this.prototype = new parent_function
-  this.prototype.constructor = this
-  this.prototype.parent = parent_function.prototype
-  return this
-} 
-
 /////////////////////
 /* Register.Events */
 /////////////////////
@@ -357,7 +346,8 @@ Object.extend(Register.Instance.prototype, {
     return this
   },
 
-  // Payment identifier for this register or Register.Instance.NEW_MARKER if this is for a new payment.
+  // Payment identifier for this register or Register.Instance.NEW_MARKER if
+  // this is for a new payment.
   id: function() {
     return this.payment.id || Register.Instance.NEW_MARKER
   },
@@ -433,7 +423,7 @@ Object.extend(Register.Instance.prototype, {
     this.show_spinner()
     if (this.on_cancel(event)) {
       var href = event.findElement().href || '#'
-      if (href.match(/^#/)) {
+      if (href.match(/#/)) {
         event.stop()
         Register.destroy(this)
         this.hide_spinner()
@@ -579,6 +569,37 @@ Register.AdjustmentCode.inherits(Register.Code)
 Register.CreditCode = function(config) { this.initialize(config) }
 Register.CreditCode.inherits(Register.Code)
 
+
+//////////////////////
+/* Register.Payment */
+//////////////////////
+
+// General information about the payment.
+Register.Payment = function(register, config) {
+  this.register = register
+  this.initialize(config)
+}
+Register.Payment.inherits(Register.Core)
+Object.extend(Register.Payment.prototype, {
+  initialize: function(config) {
+    this.config = config || {}
+    this.fields = $A([])
+    var prop
+    for (prop in config) {
+      this.fields.push(prop)
+      this[prop] = config[prop]
+    }
+    this.new = this.id ? false : true
+  }
+
+  // Returns true if this is a new payment that has not been saved
+  // server side yet.  Otherwise we are making an update to an existing
+  // payment.
+  is_new: function() {
+    return this.new
+  }
+})
+
 /////////////////////
 /* Register.Ledger */
 /////////////////////
@@ -626,7 +647,7 @@ Object.extend(Register.Ledger.prototype, {
       })
     }
     this.rows.push(new_row)
-    if (!new_row.read_only) {
+    if (new_row.is_new()) {
       // Registers a remove call with the row's 'destroy' listener so that we remove
       // the row from the ledger array when it is destroyed.
       new_row.add_listener('destroy', this.remove.bind(this))
@@ -773,13 +794,13 @@ Object.extend(Register.Ledger.prototype, {
   // If you pass 'new' you will get only the new unsaved rows.
   // The default is both.
   purchase_rows: function(old_or_new) {
-    return this.__rows_by_type('purchase', { old_or_new: old_or_new })
+    return this.__rows_by_type(Register.LedgerRow.PURCHASE_TYPE, { old_or_new: old_or_new })
   },
 
   // Get the payment rows, both old and new.
   // Same options as purchase_rows.
   payment_rows: function(old_or_new) {
-    return this.__rows_by_type('payment', { old_or_new: old_or_new })
+    return this.__rows_by_type(Register.LedgerRow.PAYMENT_TYPE, { old_or_new: old_or_new })
   },
 
   // Return the new payment row, if there is one.
@@ -790,7 +811,7 @@ Object.extend(Register.Ledger.prototype, {
   // Get the change rows, both old and new
   // Same options as purchase_rows.
   change_rows: function(old_or_new) {
-    return this.__rows_by_type('change', { old_or_new: old_or_new })
+    return this.__rows_by_type(Register.LedgerRow.CHANGE_TYPE, { old_or_new: old_or_new })
   },
 
   // Return the new change row, if there is one.
@@ -1135,28 +1156,6 @@ Object.extend(Register.LedgerRow.prototype, {
   },
 })
 
-//////////////////////
-/* Register.Payment */
-//////////////////////
-
-// General information about the payment.
-Register.Payment = function(register, config) {
-  this.register = register
-  this.initialize(config)
-}
-Register.Payment.inherits(Register.Core)
-Object.extend(Register.Payment.prototype, {
-  initialize: function(config) {
-    this.config = config || {}
-    this.fields = $A([])
-    var prop
-    for (prop in config) {
-      this.fields.push(prop)
-      this[prop] = config[prop]
-    }
-    this.read_only = this.id ? true : false
-  }
-})
 
 /////////////////////
 /* Register.UI     */
@@ -1252,12 +1251,15 @@ Object.extend(Register.UI.prototype, {
           'label'
         )
       )
-      this.set_from_payment()
+      // set up existing payment/ledger information
+      this.set_payment_fields_from_payment()
+      this.set_ledger_history()
       // initialize callback functions in the root register so that it will respond to
       // user actions
       this.initialize_register_callbacks()
       // set the register's title header
       this.set_title()
+      // ensure UI is updated when ledger changes.
       this.ledger.add_listener('update', this.update.bind(this))
       // set visible payment fields
       // set ledger payment code to first available
@@ -1364,7 +1366,7 @@ Object.extend(Register.UI.prototype, {
   },
 
   // Sets payment field values from register.payment.
-  set_from_payment: function() {
+  set_payment_fields_from_payment: function() {
     var payment = this.register.payment
     payment.fields.each(function(field_name) {
       var input = this.find_payment_field(field_name, true)
@@ -1372,6 +1374,25 @@ Object.extend(Register.UI.prototype, {
         input.value = payment[field_name]
       }
     }, this)
+  },
+
+  // Creates read only ledger row history from any existing ledger purchase or change rows
+  // (if we are updating a previous payment).  Also disables amount tendered input if
+  // we are updating a previous payment.
+  set_ledger_history: function() {
+    if (this.is_refund()) {
+      this.ledger.get_rows('old').each(function(row) {
+        if (!row.is_payment()) {
+          this.add_ledger_history_row(row)
+        }
+      }, this)
+      this.tendered.disabled = true
+    }
+  },
+
+  // True if we are creating a new payment.
+  is_new: function() {
+    return this.register.payment.is_new()
   },
 
   set_title: function() {
@@ -1419,8 +1440,16 @@ Object.extend(Register.UI.prototype, {
     return options
   },
 
+  // A read-only ledger when updating a payment.
+  add_ledger_history_row: function(ledger_row) {
+    return this._add_ledger_row(ledger_row)
+  },
+
   add_ledger_row: function(code_id, amount) {
-    var ledger_row = this.register.ledger.add_purchase(code_id, amount)
+    return this._add_ledger_row(this.register.ledger.add_purchase(code_id, amount))
+  },
+
+  _add_ledger_row: function(ledger_row) {
     var ui_row = (new Register.UI.Row(this, ledger_row))
     this.rows.push(ui_row)
     this.ledger_entries.insert(ui_row.root)
@@ -1590,7 +1619,9 @@ Object.extend(Register.UI.prototype, {
     this.initialize_payment_code_controls()     
     this.initialize_amount_tendered_control()
     this.initialize_submission_controls()
-    this.initialize_register_card_swipe()
+    if (!this.is_refund()) {
+      this.initialize_register_card_swipe()
+    }
     this.initialize_tabbing_controls()
   },
 
@@ -1750,12 +1781,12 @@ Object.extend(Register.UI.Row.prototype, {
       input.is_a_credit_or_debit_field = true
     }
 
-    // If row is read-only, inputs should be disabled.
+    // If row is not new, inputs should be disabled.
     // A debit or credit field should only enable if the row is a debit or credit.
     input.allow_enable = function() {
       var ledger_row = this.ui_row.ledger_row
       var enable_allowed = true
-      if (ledger_row.read_only ||
+      if (!ledger_row.is_new() ||
          (this.is_a_credit_or_debit_field &&
           !ledger_row["is_" + this.ledger_field_name]())) {
         enable_allowed = false
@@ -1814,6 +1845,11 @@ Object.extend(Register.UI.Row.prototype, {
     this.get_controls().invoke('disable')
   },
 
+  // True if this row reflects a read only ledger row.
+  read_only: function() {
+    return !this.ledger_row.is_new()
+  },
+
   // Setup the event callbacks for the row's controls.
   // * ledger row value - on change flip credit/debit if switch from positive to negative,
   //   delete if zero, update totals
@@ -1854,6 +1890,18 @@ Object.extend(Register.UI.Row.prototype, {
     return true
   },
 })
+
+
+////////////////////////
+/* Simple Inheritance */
+////////////////////////
+
+Function.prototype.inherits = function(parent_function) { 
+  this.prototype = new parent_function
+  this.prototype.constructor = this
+  this.prototype.parent = parent_function.prototype
+  return this
+} 
 
 /////////////////////////
 /* Object Utilities    */
@@ -1945,3 +1993,4 @@ var FormUtils = {
   }
 }
 Element.addMethods('form', FormUtils)
+
