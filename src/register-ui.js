@@ -173,8 +173,8 @@ Object.extend(Register.UI.prototype, {
   // does not already include it.)
   // Set include_disabled to true to find any payment field by id.
   find_payment_field: function(id, include_disabled) {
-    id = id.match(/^payment_/) ? id : 'payment_' + id
-    return this.get_payment_fields(include_disabled).detect(function(f) { return f.id == id })
+  //  id = id.match(/^payment_/) ? id : 'payment_' + id
+    return this.get_payment_fields(include_disabled).detect(function(f) { return f.id == id || f.id == 'payment_' + id })
   },
 
   // Returns an Array of the enabled submission controls.
@@ -217,7 +217,7 @@ Object.extend(Register.UI.prototype, {
     Register.UI.setup_payment_fields_by_type_for(this.root, this.get_payment_type())
     if (!this.is_new()) {
       this.get_payment_fields().each(function(field) {
-        if (!field.id.match(/payment_(user|note|date)/)) {
+        if (!field.id.match(/payment_note/)) {
           field.disable()
         }
       })

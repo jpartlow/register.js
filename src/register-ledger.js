@@ -6,7 +6,7 @@
 
 // General information about the payment.
 Register.Payment = function(register, config) {
-  this.register = register
+  this._register = register
   this.initialize(config)
 }
 Register.Payment.inherits(Register.Core)
@@ -17,14 +17,16 @@ Object.extend(Register.Payment.prototype, {
     var prop
     for (prop in config) {
       this.fields.push(prop)
-      this[prop] = config[prop]
+      if (Object.isUndefined(this[prop])) {
+        this[prop] = config[prop]
+      }
     }
     this.new = this.id ? false : true
   },
 
   // Returns the payment Register.Code matching our type.
   code: function() {
-    return this.register.find_code_by('payment_type', this.type) 
+    return this._register.find_code_by('payment_type', this.type) 
   },
  
   // Returns true if this is a new payment that has not been saved
@@ -353,7 +355,7 @@ Object.extend(Register.Ledger.prototype, {
       this.errors.push('you may not return negative change...')
     }
     if (this.reversing()) {
-      this.errors.concat(this.validate_reversal())
+      this.errors = this.errors.concat(this.validate_reversal())
     } else if (this.payment_code instanceof Register.PaymentCode) {
       if (tendered <= 0) {
         this.errors.push('amount tendered must be positive for a payment')

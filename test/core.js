@@ -1036,6 +1036,21 @@ test("register-validates-cannot-refund-more-than-payment", function() {
   equal(errors.length, 0)
 })
 
+test("register-validates-reversal", function() {
+  expect(4)
+  var st = this.gold.purchase_codes[0]
+  var pr = this.gold.purchase_codes[1]
+  var ledger_st = this.gold.ledger[2]
+  var amount = ledger_st.credit
+  equal(st.code, ledger_st.register_code)
+
+  row = this.ledger.add_purchase(pr.id, -amount)
+
+  ok(!this.ledger.validate())
+  equal(this.ledger.errors.length, 1)
+  matches(this.ledger.errors[0], /no code PR.*original payment/)
+})
+
 test("register-existing-payment-sets-payment-type", function() {
   expect(1)
   this.config.payment = {
@@ -1049,7 +1064,7 @@ test("register-existing-payment-sets-payment-type", function() {
 })
 
 test("register-payment-fields-disabled-for-partial-refund", function() {
-  expect(6)
+  expect(2)
   this.config.payment = {
     'id' : 1,
     'type' : 'CreditCard',
@@ -1058,29 +1073,10 @@ test("register-payment-fields-disabled-for-partial-refund", function() {
   this.ui = this.register.ui.initialize()
   this.ledger = this.register.ledger
   // Should just return date, user, notes
-  equal(this.ui.get_payment_fields().length, 5)
+  equal(this.ui.get_payment_fields().length, 1)
   this.ui.get_payment_fields().each(function(field) {
-    matches(field.id, /payment_(user|note|date)/)
+    matches(field.id, /payment_note/)
   })
-})
-
-test("register-ui-date-user-not-set-from-previous-payment-for-partial-refund", function() {
-  expect(2)
-  this.config.payment = {
-    'id' : 1,
-    'type' : 'CreditCard',
-    'date_1i' : '2010',
-    'date_2i' : '1',
-    'date_3i' : '31',
-    'user_id' : '1'
-  }
-  this.register = new Register.Instance(this.config)
-  this.ui = this.register.ui.initialize()
-  this.ledger = this.register.ledger
-  ok(this.ui.find_payment_field('date_1i').value != '2010')
-//  ok(this.ui.find_payment_field('date_2i').value != '1') // fails in January
-//  ok(this.ui.find_payment_field('date_3i').value != '31') // fails 1/31
-  equal(this.ui.find_payment_field('user_id').value, '')
 })
 
 test("register-ui-amount-tendered-disabled-for-existing-payment", function() {
