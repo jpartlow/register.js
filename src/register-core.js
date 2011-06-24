@@ -200,6 +200,17 @@ Register.Core.prototype = {
     return (dollar_sign ? '$' : '') + decimal 
   },
 
+  // parseFloat, but handles a string with a preceeding '$'
+  // parseMoney(45.1)    => 45.1
+  // parseMoney('45.10)  => 45.1
+  // parseMoney('$45.10) => 45.1
+  parseMoney: function(amount) {
+    if (typeof(amount) == 'string') {
+      amount = amount.replace('$','','g')
+    }
+    return parseFloat(amount)
+  },
+
   // Locate by an id string or selector string, in the Document, or in passed
   // element.  This method should be used for locating required elements in the
   // register's html template.

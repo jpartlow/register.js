@@ -120,7 +120,7 @@ Object.extend(Register.Ledger.prototype, {
   // typically if they pay with more cash than the purchase total and are
   // therefore due change.
   set_amount_tendered: function(tendered) {
-    var amount_tendered = parseFloat(tendered)
+    var amount_tendered = this.parseMoney(tendered)
     this._amount_tendered = isNaN(amount_tendered) ? undefined : amount_tendered
     this.update()
     return this
@@ -599,7 +599,7 @@ Object.extend(Register.LedgerRow.prototype, {
     if (this.read_only) {
       throw( new Register.Exceptions.LedgerRowException('__set_amount', "Attempted to set #{type} to #{amount} for a read only row.", { type: type, amount: raw_amount }))
     }
-    var amount = parseFloat(raw_amount) 
+    var amount = this.parseMoney(raw_amount) 
     if (isNaN(amount)) {
       throw( new Register.Exceptions.LedgerRowException('__set_amount', "Attempted to set #{type} but amount #{amount} is not a number.", { type: type, amount: amount }))
     } else if (amount == 0) {

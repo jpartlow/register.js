@@ -87,6 +87,15 @@ test("monetize", function() {
   equal(core.monetize(undefined)  , undefined)
 })
 
+test("parseMoney", function() {
+  expect(4)
+  var core = new Register.Core()
+  equal(core.parseMoney(45.1)          , 45.1)
+  equal(core.parseMoney('45.10')       , 45.1)
+  equal(core.parseMoney('$45.10')      , 45.1)
+  equal(core.parseMoney('$45.105')      , 45.105)
+})
+
 test("gold-data", function() {
   expect(4)
   gd = new GoldData()
@@ -505,19 +514,29 @@ test("register-ledger-set-payment-code", function() {
 })
 
 test("register-ledger-set-amount-tendered", function() {
-  expect(6)
+  expect(11)
   var ledger = this.register.ledger
   strictEqual(ledger.get_amount_tendered_or_credited(), 0)
   ledger.set_amount_tendered('100')
   strictEqual(ledger.get_amount_tendered_or_credited(), 100)
   ledger.set_amount_tendered(55)
   strictEqual(ledger.get_amount_tendered_or_credited(), 55)
+  ledger.set_amount_tendered(55.33)
+  strictEqual(ledger.get_amount_tendered_or_credited(), 55.33)
+  ledger.set_amount_tendered(55.456)
+  strictEqual(ledger.get_amount_tendered_or_credited(), 55.456)
   ledger.set_amount_tendered('0')
   strictEqual(ledger.get_amount_tendered_or_credited(), 0)
   ledger.set_amount_tendered('')
   strictEqual(ledger.get_amount_tendered_or_credited(), 0)
   ledger.set_amount_tendered()
   strictEqual(ledger.get_amount_tendered_or_credited(), 0)
+  ledger.set_amount_tendered('$150')
+  strictEqual(ledger.get_amount_tendered_or_credited(), 150)
+  ledger.set_amount_tendered('$150.20')
+  strictEqual(ledger.get_amount_tendered_or_credited(), 150.2)
+  ledger.set_amount_tendered('$150.3012')
+  strictEqual(ledger.get_amount_tendered_or_credited(), 150.3012)
 })
  
 test("register-ledger-payment-updates-change", function() {
