@@ -579,13 +579,19 @@ Object.extend(Register.UI.prototype, {
     }.bind(this))
     // register payment_type catches tab, allows onChange to fire to ensure that
     // fields are hidden/shown based on payment type, and then moves to the next
-    // input that would be available by payment type
+    // input that would be available by payment type unless that field is the
+    // payment type selector itself or the focus is currently on amount-tendered
     this.payment_codes_select.observe('keypress', function(event) {
       if (event.keyCode == Event.KEY_TAB && !event.shiftKey) {
+        var payment_codes_select = event.findElement()
         // Allow a moment for the onChange event to complete updates to the 
         // enabled/disabled fields
         setTimeout(function() { 
-          this.get_enabled_visible_payment_fields().first().focus()
+          next_payment_field = this.get_enabled_visible_payment_fields().first()
+          if ((payment_codes_select != next_payment_field) &&
+              (this.tendered != document.activeElement)) {
+            next_payment_field.focus()
+          }
         }.bind(this), 100)
       } 
     }.bind(this))
