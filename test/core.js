@@ -378,6 +378,36 @@ test("register-ledger-row-set-amount", function() {
   strictEqual(lr.get_amount(), 15.5)
 })
 
+test("register-ledger-row-set-fractional-amounts", function() {
+  expect(15)
+  var pc = this.gold.purchase_codes[0]
+  var config = {
+    code_type: 'purchase',
+    code: pc,
+    credit: '10.50',
+  }
+  var lr = new Register.LedgerRow(config)
+  strictEqual(lr.get_credit(), 10.5)
+  is_undefined(lr.get_debit())
+  ok(lr.is_credit())
+  ok(!lr.is_debit())
+  strictEqual(lr.get_amount(), 10.5)
+
+  lr.set_credit('0.345')
+  strictEqual(lr.get_credit(), 0.34)
+  is_undefined(lr.get_debit())
+  ok(lr.is_credit())
+  ok(!lr.is_debit())
+  strictEqual(lr.get_amount(), 0.34)
+
+  lr.set_debit('6.721')
+  is_undefined(lr.get_credit())
+  strictEqual(lr.get_debit(), 6.72)
+  ok(!lr.is_credit())
+  ok(lr.is_debit())
+  strictEqual(lr.get_amount(), -6.72)
+})
+
 test("register-ledger-add", function() {
   expect(1)
   var ledger = this.register.ledger
@@ -957,6 +987,24 @@ test("register-ui-submit", function() {
       },
     ],
   })
+})
+
+test("register-submit-with-fractional-amounts", function() {
+  expect(7)
+  var ui = this.register.ui.initialize()
+  var register = this.register
+  var serialized
+  register.on_submit = function(event, serialized_form) {
+    return serialized = serialized_form 
+  }
+
+  add_purchase(ui, '10.37', 1)
+  change_tendered(ui, '12')
+  set_user_id(ui)
+  submit(ui, 'record')
+  equal(ui.errors.length, 0)
+  change_credit = serialized["payment[ledger_entries_attributes][2][credit]"]
+  equal(change_credit, 1.63)
 })
 
 test("register-ui-set-payment-code", function() {

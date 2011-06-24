@@ -604,6 +604,8 @@ Object.extend(Register.LedgerRow.prototype, {
       throw( new Register.Exceptions.LedgerRowException('__set_amount', "Attempted to set #{type} but amount #{amount} is not a number.", { type: type, amount: amount }))
     } else if (amount == 0) {
       throw( new Register.Exceptions.LedgerRowException('__set_amount', "Cannot set a LedgerRow amount to zero."))
+    } else {
+      amount = parseFloat(amount.toFixed(2)) // get a float fixed to 2 decimal places
     }
 
     var setter = function (amount, reverse) {
