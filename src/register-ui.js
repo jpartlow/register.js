@@ -114,12 +114,12 @@ Object.extend(Register.UI.prototype, {
 
   // Reset total amounts based on current ledger.
   update: function() {
-    this.total.update(this.monetize(this.ledger.get_purchase_total(), true))
+    this.total.update(this.monetize_from_cents(this.ledger.get_purchase_total(), true))
     this.tendered.ledger_value = this.ledger.get_tendered_total()
-    this.tendered.value = (this.monetize(this.tendered.ledger_value, true))
+    this.tendered.value = (this.monetize_from_cents(this.tendered.ledger_value, true))
     this.credited.ledger_value = this.ledger.get_credited_total()
-    this.credited.update(this.monetize(this.credited.ledger_value, true))
-    this.change.update(this.monetize(this.ledger.get_change_total(), true))
+    this.credited.update(this.monetize_from_cents(this.credited.ledger_value, true))
+    this.change.update(this.monetize_from_cents(this.ledger.get_change_total(), true))
     this.tendered.ledger_value == 0 ? this.tendered_row.hide() : this.tendered_row.show()
     this.credited.ledger_value == 0 ? this.credited_row.hide() : this.credited_row.show()
   },
@@ -312,7 +312,8 @@ Object.extend(Register.UI.prototype, {
   },
 
   add_ledger_row: function(code_id, amount) {
-    return this._add_ledger_row(this.register.ledger.add_purchase(code_id, amount))
+    var cents = this.convert_to_cents(amount)
+    return this._add_ledger_row(this.register.ledger.add_purchase(code_id, cents))
   },
 
   _add_ledger_row: function(ledger_row) {
@@ -365,9 +366,9 @@ Object.extend(Register.UI.prototype, {
     if (this.before_purchase_code_select && !this.before_purchase_code_select()) {
       event.stop()
     } else {
-      var amount = this.purchase_amount_input.value
+      var amount = this.parseMoney(this.purchase_amount_input.value)
       var code_id = this.purchase_codes_select.value
-      if (isNaN(parseFloat(amount))) {
+      if (isNaN(amount)) {
         this.alert_user("Please enter an amount")
       } else if (isNaN(code_id)) {
         // do not attempt to add -- default code row selected.
@@ -434,7 +435,7 @@ Object.extend(Register.UI.prototype, {
 
   // Callback for user changing the amount tendered.
   handle_amount_tendered_input: function(event) {
-    this.ledger.set_amount_tendered(this.tendered.value)
+    this.ledger.set_amount_tendered(this.convert_to_cents(this.tendered.value))
   },
 
   // Callback for user clicking the cancel control.
@@ -458,7 +459,7 @@ Object.extend(Register.UI.prototype, {
     } else {
       // double-check authorization or record calls for credit cards.
       if (this.successful_submitter.value == 'Authorize') {
-        if (!confirm("Authorizing will put a temporary hold in the amount of " + this.monetize(this.ledger.get_amount_tendered_or_credited(), true) + " on the guest's credit card.  No funds will be transferred.  You may capture the funds later in a separate transaction.  Continue?")) {
+        if (!confirm("Authorizing will put a temporary hold in the amount of " + this.monetize_from_cents(this.ledger.get_amount_tendered_or_credited(), true) + " on the guest's credit card.  No funds will be transferred.  You may capture the funds later in a separate transaction.  Continue?")) {
           return false
         }
       }
@@ -692,7 +693,7 @@ Object.extend(Register.UI.Row.prototype, {
   __set: function(name, monetize_value) {
     var value = this.ledger_row["get_" + name]()
     value = value || ''
-    this[name].value = monetize_value ? this.monetize(value) : value
+    this[name].value = monetize_value ? this.monetize_from_cents(value) : value
     return this
   },
 
@@ -743,8 +744,9 @@ Object.extend(Register.UI.Row.prototype, {
   handle_update: function(event) {
     var ui_row = this.ui_row
     var ledger_row = ui_row.ledger_row
+    var row_value = this.value
     if (this.is_a_credit_or_debit_field) {
-      var numeric_value = parseFloat(this.value)
+      var numeric_value = ui_row.parseMoney(this.value)
       if (this.value.empty() || numeric_value == 0) {
         return ledger_row.destroy()
       } else if (isNaN(numeric_value)) {
@@ -752,8 +754,9 @@ Object.extend(Register.UI.Row.prototype, {
         ui_row.__set(this.ledger_field_name, true)
         return false
       }
+      row_value = ui_row.convert_to_cents(numeric_value)
     }
-    return ledger_row.update(this.ledger_field_name, this.value)
+    return ledger_row.update(this.ledger_field_name, row_value)
   },
 
   // Remove the row from the ledger and destroy it.

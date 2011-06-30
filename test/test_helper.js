@@ -68,12 +68,35 @@ function equal_elements(actual, expected, deep) {
   })
 }
 
+function assert_amount(ledger_row, amount_in_cents, method) {
+  var amount_in_dollars = amount_in_cents/100
+  var inverse = (method == 'credit' ? 'debit' : 'credit')
+  strictEqual(ledger_row['get_' + method](), amount_in_cents)
+  strictEqual(ledger_row['get_' + method + '_in_cents'](), amount_in_cents)
+  strictEqual(ledger_row['get_' + method + '_in_dollars'](), amount_in_dollars)
+  is_undefined(ledger_row['get_' + inverse]())
+  ok(ledger_row['is_' + method]())
+  ok(!ledger_row['is_' + inverse]())
+  strictEqual(Math.abs(ledger_row.get_amount()), amount_in_cents)
+  strictEqual(Math.abs(ledger_row.get_amount_in_cents()), amount_in_cents)
+  strictEqual(Math.abs(ledger_row.get_amount_in_dollars()), amount_in_dollars)
+}
+
+function assert_credit(ledger_row, credit_in_cents) {
+  assert_amount(ledger_row, credit_in_cents, 'credit')
+}
+
+function assert_debit(ledger_row, debit_in_cents) {
+  assert_amount(ledger_row, debit_in_cents, 'debit')
+}
+
 function add_purchase(ui, amount, code) {
   var pc = ui.purchase_codes_select
   var am = ui.purchase_amount_input
   am.value = amount
   pc.value = code
-  ok(fireEvent(pc, 'change'), 'payment select change event failed for add_purchase')
+  var result = fireEvent(pc, 'change')
+  ok( result == true, 'payment select change event failed for add_purchase')
   return true
 }
 
@@ -260,8 +283,8 @@ function GoldData() {
       type: "Asset",
       account_number: "1010.000",
       account_name: "Cash",
-      debit: null,
-      credit: 8.0,
+      debit_in_dollars: null,
+      credit_in_dollars: 8.0,
       detail: '',
       register_code: "CA",
       code_label: "Change",
@@ -272,8 +295,8 @@ function GoldData() {
       type: "Asset",
       account_number: "1010.000",
       account_name: "Cash",
-      debit: 40.0,
-      credit: null,
+      debit_in_cents: 4000,
+      credit_in_cents: null,
       detail: '',
       register_code: "CA",
       code_label: "Cash",
@@ -285,7 +308,7 @@ function GoldData() {
       account_number: "4210.000",
       account_name: "Store Purchase",
       debit: null,
-      credit: 32.0,
+      credit: 3200,
       detail: '',
       register_code: "ST",
       code_label: "Store Purchase",

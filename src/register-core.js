@@ -1,7 +1,7 @@
 /* This file is part of register.js.  Copyright 2011 Joshua Partlow.  This program is free software, licensed under the terms of the GNU General Public License.  Please see the LICENSE file in this distribution for more information, or see http://www.gnu.org/copyleft/gpl.html. */
 
 var Register = {
-  version: '0.1.5',
+  version: '0.1.6',
   debug: false,
   registers: $H(),
 
@@ -183,6 +183,9 @@ Register.Core.prototype = {
   // Present a number as a dollar amount string with two decimal places.
   // If amount is not a number or a string which can be parsed as a number,
   // amount will be returned as is.
+  //
+  // Input is assumed to be in dollars.
+  //
   // Default is without dollar sign.
   // monetize(45)         => '45.00'
   // monetize(34.0, true) => '$34.00'
@@ -199,6 +202,12 @@ Register.Core.prototype = {
     var decimal = amount.toFixed(2)
     return (dollar_sign ? '$' : '') + decimal 
   },
+ 
+  // Assume input is in cents, convert to dollars and then monetize() 
+  monetize_from_cents: function(cents, dollar_sign) {
+    var dollars = parseInt(cents)/100
+    return this.monetize(isNaN(dollars) ? cents : dollars, dollar_sign)
+  },
 
   // parseFloat, but handles a string with a preceeding '$'
   // parseMoney(45.1)    => 45.1
@@ -209,6 +218,22 @@ Register.Core.prototype = {
       amount = amount.replace('$','','g')
     }
     return parseFloat(amount)
+  },
+
+  // Convert the given string or number to a number, multiple by 100 and round.
+  // convert_to_cents(45.1)          => 4510
+  // convert_to_cents('45.01')       => 4501
+  // convert_to_cents('$45.10')      => 4510
+  // convert_to_cents('$45.105')     => 4511
+  // convert_to_cents('$18.99')      => 1899
+  // convert_to_cents(4510)          => 451000
+  // convert_to_cents('1899')        => 189900
+  // convert_to_cents('foo')         => NaN
+  // convert_to_cents(null)          => NaN
+  // convert_to_cents(undefined)     => NaN
+  convert_to_cents: function(amount) {
+    var dollars = this.parseMoney(amount)
+    return isNaN(dollars) ? dollars : Math.round(dollars*100)
   },
 
   // Locate by an id string or selector string, in the Document, or in passed

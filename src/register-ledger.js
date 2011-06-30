@@ -118,9 +118,13 @@ Object.extend(Register.Ledger.prototype, {
 
   // Can be set to override the amount the customer is actually paying,
   // typically if they pay with more cash than the purchase total and are
-  // therefore due change.
-  set_amount_tendered: function(tendered) {
-    var amount_tendered = this.parseMoney(tendered)
+  // therefore due change.  Expects amount in integer cents.
+  set_amount_tendered: function(tendered_in_cents) {
+    var amount_tendered = parseInt(tendered_in_cents)
+    var float = parseFloat(tendered_in_cents)
+    if (!isNaN(amount_tendered) && amount_tendered !== float) {
+      throw(new Register.Exceptions.LedgerException('set_amount_tendered', "Expected amount in integer cents but given: '#{float}'", { 'float': float }))
+    }
     this._amount_tendered = isNaN(amount_tendered) ? undefined : amount_tendered
     this.update()
     return this
@@ -399,19 +403,19 @@ Object.extend(Register.Ledger.prototype, {
 //   that generated this row (this is different than the GL account_code or
 //   account_name, since multiple register codes might be tied to the same
 //   account)
-// * debit: debit amount
-// * credit: credit amount
+// * debit: debit amount in cents
+// * credit: credit amount in cents
 // * code_label: the longhand label associated with the Register.Code that
 //   generated this row
 // * code_type: purchase, payment or change
 //
 // NOTE: Only debit or credit should have a value, not both.  
 //
-// The reason an existing ledger row
-// configuration contains all of the account code/register code information directly rather
-// than just referencing a Register.Code the way a new instance does, is because we may be
-// making an adjustment to an existing payment from the past, and register codes may
-// have been reconfigured since then.
+// The reason an existing ledger row configuration contains all of the account
+// code/register code information directly rather than just referencing a
+// Register.Code the way a new instance does, is because we may be making an
+// adjustment to an existing payment from the past, and register codes may have
+// been reconfigured since then.
 //
 // Generating a new LedgerRow from code would expect:
 // * code_type: as above
@@ -421,8 +425,14 @@ Object.extend(Register.Ledger.prototype, {
 //
 // NOTE: only one of either debit or credit should be present.
 //
+// Amounts are stored internally as integer cents.
+//
+// The debit and credit properties assume integer cents, but may be set
+// explicitly as either debit_in_cents and credit_in_cents or debit_in_dollars and
+// credit_in_dollars.
+//
 // Throws Register.Exceptions.LedgerRowException if both debit, credit are set,
-// if amount is 0 or not a number, or if the code_type is not one of
+// if amount is 0, a float or not a number, or if the code_type is not one of
 // Register.LedgerRow.TYPES.
 //
 // Properties
@@ -466,13 +476,22 @@ Object.extend(Register.LedgerRow.prototype, {
 
     if (!Register.LedgerRow.TYPES.include(this.code_type)) {
       throw(new Register.Exceptions.LedgerRowException('initialize', "Cannot initialize a LedgerRow whose code_type is not in Register.LedgerRow.TYPES: '#{type}'", { type: this.code_type }))
-    } else if (this.config.credit && this.config.debit) {
-      throw(new Register.Exceptions.LedgerRowException('intialize', "Cannot initialize a LedgerRow with both credit (#{credit}) and debit (#{debit}) values.", { credit: this.config.credit, debit: this.config.debit }))
+    } else {
+      var credit_or_debit_parameters = $H(this.config).select(function(entry) {
+        return entry[0].match(/^credit|^debit/)
+      }).map(function(entry) {
+        return entry[1]
+      }).compact()
+      if (credit_or_debit_parameters.size() != 1) {
+        throw(new Register.Exceptions.LedgerRowException('intialize', "A LedgerRow must have one and only one credit or debit parameter.  Given: (#{parameters})", { parameters: credit_or_debit_parameters }))
+      }
     }
 
     var amount
-    if (amount = this.config.debit) { this.set_debit(amount) }
-    if (amount = this.config.credit) { this.set_credit(amount) }
+    if (amount = this.config.debit || this.config.debit_in_cents) { this.set_debit_in_cents(amount) }
+    if (amount = this.config.debit_in_dollars ) { this.set_debit_in_dollars(amount) }
+    if (amount = this.config.credit || this.config.credit_in_cents) { this.set_credit_in_cents(amount) }
+    if (amount = this.config.credit_in_dollars) { this.set_credit_in_dollars(amount) }
     if (this.get_amount() == 0) {
       throw(new Register.Exceptions.LedgerRowException('initialize', "LedgerRow amount must be non-zero"))
     }
@@ -491,11 +510,28 @@ Object.extend(Register.LedgerRow.prototype, {
   },
 
   get_debit: function() {
-    return this.debit 
+    return this.get_debit_in_cents()
   },
 
-  set_debit: function(amount) {
-    return this.__set_amount(amount, 'debit')    
+  get_debit_in_cents: function(){
+    return this.debit
+  },
+
+  get_debit_in_dollars: function() {
+    return this.get_debit_in_cents() / 100
+  },
+
+  set_debit: function(amount_in_cents) {
+    return this.set_debit_in_cents(amount_in_cents)
+  },
+
+  set_debit_in_cents: function(amount_in_cents) {
+    return this.__set_amount(amount_in_cents, 'debit')    
+  },
+
+  set_debit_in_dollars: function(amount_in_dollars) {
+    var amount_in_cents = (new Number(amount_in_dollars) * 100).round()
+    return this.set_debit_in_cents(amount_in_cents)    
   },
 
   // True if the ledger row is a debit amount.
@@ -504,11 +540,28 @@ Object.extend(Register.LedgerRow.prototype, {
   },
 
   get_credit: function() {
+    return this.get_credit_in_cents()
+  },
+
+  get_credit_in_cents: function() {
     return this.credit
   },
 
-  set_credit: function(amount) {
-    return this.__set_amount(amount, 'credit')    
+  get_credit_in_dollars: function() {
+    return this.get_credit_in_cents()/100  
+  },
+
+  set_credit: function(amount_in_cents) {
+    return this.set_credit_in_cents(amount_in_cents)
+  },
+
+  set_credit_in_cents: function(amount_in_cents) {
+    return this.__set_amount(amount_in_cents, 'credit')    
+  },
+
+  set_credit_in_dollars: function(amount_in_dollars) {
+    var amount_in_cents = (new Number(amount_in_dollars) * 100).round()
+    return this.set_credit_in_cents(amount_in_cents)    
   },
 
   // True if the ledger row is a credit amount.
@@ -516,10 +569,14 @@ Object.extend(Register.LedgerRow.prototype, {
     return this.credit ? true : false
   },
 
-  // Returns the credit or debit amount as a signed amount depending on account type.
-  // (For Asset and Expense accounts, debits are positive; for Liability and Income
-  // accounts, credits are positive.)
+  // Returns the credit or debit amount as a signed amount in cents depending
+  // on account type.  (For Asset and Expense accounts, debits are positive;
+  // for Liability and Income accounts, credits are positive.)
   get_amount: function() {
+    return this.get_amount_in_cents()
+  },
+
+  get_amount_in_cents: function() {
     var amount
     var getter = function (type) {
       var reverse = type == 'debit' ? 'credit' : 'debit'
@@ -534,14 +591,20 @@ Object.extend(Register.LedgerRow.prototype, {
     return amount
   },
 
-  // Returns either credit or negative debit, ignoring the account type, unlike get_amount().
-  get_credit_or_debit: function() {
-    return this.credit || -1 * this.debit || 0
+  get_amount_in_dollars: function() {
+    return this.get_amount_in_cents()/100
   },
 
-  // Returns either debit or negative credit, ignoring the account type, unlike get_amount().
+  // Returns either credit or negative debit, ignoring the account type, unlike
+  // get_amount().
+  get_credit_or_debit: function() {
+    return this.get_credit() || -1 * this.get_debit() || 0
+  },
+
+  // Returns either debit or negative credit, ignoring the account type, unlike
+  // get_amount().
   get_debit_or_credit: function() {
-    return this.debit || -1 * this.credit || 0
+    return this.get_debit() || -1 * this.get_credit() || 0
   },
 
   get_detail: function() {
@@ -588,8 +651,8 @@ Object.extend(Register.LedgerRow.prototype, {
       account_name: this.account_name,
       detail: this.get_detail(),
       register_code: this.register_code,
-      debit: this.get_debit(),
-      credit: this.get_credit(),
+      debit_in_cents: this.get_debit(),
+      credit_in_cents: this.get_credit(),
       code_label: this.get_label(),
       code_type: this.code_type,
     }
@@ -599,13 +662,13 @@ Object.extend(Register.LedgerRow.prototype, {
     if (this.read_only) {
       throw( new Register.Exceptions.LedgerRowException('__set_amount', "Attempted to set #{type} to #{amount} for a read only row.", { type: type, amount: raw_amount }))
     }
-    var amount = this.parseMoney(raw_amount) 
+    var amount = parseInt(raw_amount) 
     if (isNaN(amount)) {
       throw( new Register.Exceptions.LedgerRowException('__set_amount', "Attempted to set #{type} but amount #{amount} is not a number.", { type: type, amount: amount }))
     } else if (amount == 0) {
       throw( new Register.Exceptions.LedgerRowException('__set_amount', "Cannot set a LedgerRow amount to zero."))
-    } else {
-      amount = parseFloat(amount.toFixed(2)) // get a float fixed to 2 decimal places
+    } else if (amount != parseFloat(raw_amount)) {
+      throw( new Register.Exceptions.LedgerRowException('__set_amount', "Expected an amount in integer cents, but given #{raw_amount}.", { raw_amount: raw_amount }))
     }
 
     var setter = function (amount, reverse) {

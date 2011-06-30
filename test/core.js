@@ -96,6 +96,21 @@ test("parseMoney", function() {
   equal(core.parseMoney('$45.105')      , 45.105)
 })
 
+test("convert_to_cents", function() {
+  expect(10)
+  var core = new Register.Core()
+  equal(core.convert_to_cents(45.1)          , 4510)
+  equal(core.convert_to_cents('45.01')       , 4501)
+  equal(core.convert_to_cents('$45.10')      , 4510)
+  equal(core.convert_to_cents('$45.105')     , 4511)
+  equal(core.convert_to_cents('$18.99')      , 1899)
+  equal(core.convert_to_cents(4510)          , 451000)
+  equal(core.convert_to_cents('1899')        , 189900)
+  ok(isNaN(core.convert_to_cents(null)))
+  ok(isNaN(core.convert_to_cents(undefined)))
+  ok(isNaN(core.convert_to_cents('foo')))
+})
+
 test("gold-data", function() {
   expect(4)
   gd = new GoldData()
@@ -272,15 +287,15 @@ test("register-ledger-row-initialize", function() {
   var lr = new Register.LedgerRow({
     code_type: 'purchase',
     code: pc,
-    credit: '10',
+    credit: '100',
   })
   is_instance_of(lr, Register.LedgerRow)
   // accessors
-  strictEqual(lr.get_credit(), 10)
+  strictEqual(lr.get_credit(), 100)
   ok(lr.is_credit())
   is_undefined(lr.get_debit())
   ok(!lr.is_debit())
-  strictEqual(lr.get_amount(), 10)
+  strictEqual(lr.get_amount(), 100)
   equal(lr.get_label(), pc.label)
   is_undefined(lr.get_detail())
   // other properties
@@ -292,12 +307,12 @@ test("register-ledger-row-initialize", function() {
 })
 
 test("register-ledger-row-bad-initialization", function() {
-  expect(4)
+  expect(5)
   var pc = this.gold.purchase_codes[0]
   var config = $H({
     code_type: 'purchase',
     code: pc,
-    credit: '10',
+    credit: '100',
   })
   raises(
     function() {
@@ -308,7 +323,7 @@ test("register-ledger-row-bad-initialization", function() {
   )
   raises(
     function() {
-      new Register.LedgerRow(config.merge({debit: 10}).toObject())
+      new Register.LedgerRow(config.merge({debit: 100}).toObject())
     },
     Register.Exceptions.LedgerRowException,
     'both debit and credit set'
@@ -327,19 +342,68 @@ test("register-ledger-row-bad-initialization", function() {
     Register.Exceptions.LedgerRowException,
     'undefined amount'
   )
+  raises(
+    function() {
+      new Register.LedgerRow(config.merge({credit: 50.5}).toObject())
+    },
+    function(exception) {
+      var ok = (exception instanceof Register.Exceptions.LedgerRowException)
+      ok = ok && (exception.message.match(/Expected.*integer cents/) != null)
+      return ok
+    },
+    'float amount'
+  )
+})
+
+test("register-ledger-row-initialize-from-dollars", function() {
+  expect(40)
+  var pc = this.gold.purchase_codes[0]
+  var config = $H({
+    code_type: 'purchase',
+    code: pc,
+  })
+  var lr = new Register.LedgerRow(config.merge({credit_in_dollars: '1.00'}).toObject())
+  assert_credit(lr, 100)
+  strictEqual(lr.get_amount(), 100)
+  var lr = new Register.LedgerRow(config.merge({credit_in_dollars: 2.99}).toObject())
+  assert_credit(lr, 299)
+  strictEqual(lr.get_amount(), 299)
+  var lr = new Register.LedgerRow(config.merge({debit_in_dollars: '3.99'}).toObject())
+  assert_debit(lr, 399)
+  strictEqual(lr.get_amount(), -399)
+  var lr = new Register.LedgerRow(config.merge({debit_in_dollars: 1.01}).toObject())
+  assert_debit(lr, 101)
+  strictEqual(lr.get_amount(), -101)
+})
+
+test("register-ledger-row-initialize-from-cents", function() {
+  expect(40)
+  var pc = this.gold.purchase_codes[0]
+  var config = $H({
+    code_type: 'purchase',
+    code: pc,
+  })
+  var lr = new Register.LedgerRow(config.merge({credit_in_cents: '100'}).toObject())
+  assert_credit(lr, 100)
+  strictEqual(lr.get_amount(), 100)
+  var lr = new Register.LedgerRow(config.merge({credit_in_cents: 299}).toObject())
+  assert_credit(lr, 299)
+  strictEqual(lr.get_amount(), 299)
+  var lr = new Register.LedgerRow(config.merge({debit_in_cents: '399'}).toObject())
+  assert_debit(lr, 399)
+  strictEqual(lr.get_amount(), -399)
+  var lr = new Register.LedgerRow(config.merge({debit_in_cents: 101}).toObject())
+  assert_debit(lr, 101)
+  strictEqual(lr.get_amount(), -101)
 })
 
 test("register-ledger-row-initialize-from-existing", function() {
-  expect(13)
+  expect(17)
   var ldata1 = this.gold.ledger[1]
   var lr = new Register.LedgerRow(ldata1)
   is_instance_of(lr, Register.LedgerRow)
   // accessors
-  strictEqual(lr.get_debit(), parseFloat(ldata1.debit))
-  ok(lr.is_debit())
-  is_undefined(lr.get_credit())
-  ok(!lr.is_credit())
-  strictEqual(lr.get_amount(), parseFloat(ldata1.debit))
+  assert_debit(lr, ldata1.debit_in_cents)
   equal(lr.get_label(), ldata1.code_label)
   is_undefined(lr.get_detail())
   // other properties
@@ -351,70 +415,68 @@ test("register-ledger-row-initialize-from-existing", function() {
 })
 
 test("register-ledger-row-set-amount", function() {
-  expect(20)
+  expect(80)
   var pc = this.gold.purchase_codes[0]
   var config = {
     code_type: 'purchase',
     code: pc,
-    credit: '10',
+    credit: '100',
   }
   var lr = new Register.LedgerRow(config)
-  strictEqual(lr.get_credit(), 10.0)
-  is_undefined(lr.get_debit())
-  ok(lr.is_credit())
-  ok(!lr.is_debit())
-  strictEqual(lr.get_amount(), 10.0)
+  assert_credit(lr, 100)
+  strictEqual(lr.get_amount(), 100)
 
-  lr.set_credit('15')
-  strictEqual(lr.get_credit(), 15.0)
-  is_undefined(lr.get_debit())
-  ok(lr.is_credit())
-  ok(!lr.is_debit())
-  strictEqual(lr.get_amount(), 15.0)
+  lr.set_credit('150')
+  assert_credit(lr, 150)
+  strictEqual(lr.get_amount(), 150)
 
-  lr.set_debit('6')
-  is_undefined(lr.get_credit())
-  strictEqual(lr.get_debit(), 6.0)
-  ok(!lr.is_credit())
-  ok(lr.is_debit())
-  strictEqual(lr.get_amount(), -6.0)
+  lr.set_credit_in_cents(200)
+  assert_credit(lr, 200)
+  strictEqual(lr.get_amount_in_cents(), 200)
 
-  lr.set_debit('-15.5')
-  strictEqual(lr.get_credit(), 15.5)
-  is_undefined(lr.get_debit())
-  ok(lr.is_credit())
-  ok(!lr.is_debit())
-  strictEqual(lr.get_amount(), 15.5)
+  lr.set_credit_in_dollars(3.99)
+  assert_credit(lr, 399)
+  strictEqual(lr.get_amount_in_dollars(), 3.99)
+
+  lr.set_debit('600')
+  assert_debit(lr, 600)
+  strictEqual(lr.get_amount(), -600)
+
+  lr.set_debit_in_cents('655')
+  assert_debit(lr, 655)
+  strictEqual(lr.get_amount_in_cents(), -655)
+
+  lr.set_debit_in_dollars(7.01)
+  assert_debit(lr, 701)
+  strictEqual(lr.get_amount_in_dollars(), -7.01)
+  
+  lr.set_debit('-422')
+  assert_credit(lr, 422)
+  strictEqual(lr.get_amount(), 422)
 })
 
 test("register-ledger-row-set-fractional-amounts", function() {
-  expect(15)
+  expect(10)
   var pc = this.gold.purchase_codes[0]
   var config = {
     code_type: 'purchase',
     code: pc,
-    credit: '10.50',
+    credit: '1050',
   }
   var lr = new Register.LedgerRow(config)
-  strictEqual(lr.get_credit(), 10.5)
-  is_undefined(lr.get_debit())
-  ok(lr.is_credit())
-  ok(!lr.is_debit())
-  strictEqual(lr.get_amount(), 10.5)
+  assert_credit(lr, 1050)
 
-  lr.set_credit('0.345')
-  strictEqual(lr.get_credit(), 0.34)
-  is_undefined(lr.get_debit())
-  ok(lr.is_credit())
-  ok(!lr.is_debit())
-  strictEqual(lr.get_amount(), 0.34)
-
-  lr.set_debit('6.721')
-  is_undefined(lr.get_credit())
-  strictEqual(lr.get_debit(), 6.72)
-  ok(!lr.is_credit())
-  ok(lr.is_debit())
-  strictEqual(lr.get_amount(), -6.72)
+  raises(
+    function() {
+      lr.set_credit('10.345')
+    },
+    function(exception) {
+      var ok = (exception instanceof Register.Exceptions.LedgerRowException)
+      ok = ok && (exception.message.match(/Expected.*integer cents/) != null)
+      return ok
+    },
+    'float amount'
+  )
 })
 
 test("register-ledger-add", function() {
@@ -433,6 +495,16 @@ test("register-ledger-remove", function() {
   equal(ledger.count(), original_count + 1)
   ledger.remove(lr)
   equal(ledger.count(), original_count)
+})
+
+test("register-ledger-add-payment-change-with-cents", function() {
+  expect(1)
+  var ledger = this.register.ledger
+  var py = this.gold.payment_codes[0]
+  ledger.set_payment_code(py.id)
+  var lr_integer = ledger.add('purchase', '1', '1000')
+  var lr_float = ledger.add('purchase', '1', '699')
+  equal(ledger.get_payment_total(), 1699)
 })
 
 test("register-ledger-row-destroy", function() {
@@ -471,13 +543,13 @@ test("register-ledger-totals-for-existing", function() {
   expect(7)
   var register = new Register.Instance(this.gold.edit_payment_register_config())
   var ledger = register.ledger
-  equal(ledger.get_purchase_total(), 32)
-  equal(ledger.get_payment_total(), 40)
-  equal(ledger.get_tendered_total(), 40)
+  equal(ledger.get_purchase_total(), 3200)
+  equal(ledger.get_payment_total(), 4000)
+  equal(ledger.get_tendered_total(), 4000)
   equal(ledger.get_credited_total(), 0)
-  equal(ledger.get_change_total(), 8)
-  equal(ledger.get_credits_total(), 40)
-  equal(ledger.get_debits_total(), 40)
+  equal(ledger.get_change_total(), 800)
+  equal(ledger.get_credits_total(), 4000)
+  equal(ledger.get_debits_total(), 4000)
 })
 
 test("register-ledger-set-payment-code", function() {
@@ -514,29 +586,22 @@ test("register-ledger-set-payment-code", function() {
 })
 
 test("register-ledger-set-amount-tendered", function() {
-  expect(11)
+  expect(7)
   var ledger = this.register.ledger
   strictEqual(ledger.get_amount_tendered_or_credited(), 0)
   ledger.set_amount_tendered('100')
   strictEqual(ledger.get_amount_tendered_or_credited(), 100)
-  ledger.set_amount_tendered(55)
-  strictEqual(ledger.get_amount_tendered_or_credited(), 55)
-  ledger.set_amount_tendered(55.33)
-  strictEqual(ledger.get_amount_tendered_or_credited(), 55.33)
-  ledger.set_amount_tendered(55.456)
-  strictEqual(ledger.get_amount_tendered_or_credited(), 55.456)
+  ledger.set_amount_tendered(544)
+  strictEqual(ledger.get_amount_tendered_or_credited(), 544)
+  raises(function() {
+    ledger.set_amount_tendered(55.33)
+  },Register.Exceptions.LedgerException, 'Cannot set amount tendered with a float')
   ledger.set_amount_tendered('0')
   strictEqual(ledger.get_amount_tendered_or_credited(), 0)
   ledger.set_amount_tendered('')
   strictEqual(ledger.get_amount_tendered_or_credited(), 0)
   ledger.set_amount_tendered()
   strictEqual(ledger.get_amount_tendered_or_credited(), 0)
-  ledger.set_amount_tendered('$150')
-  strictEqual(ledger.get_amount_tendered_or_credited(), 150)
-  ledger.set_amount_tendered('$150.20')
-  strictEqual(ledger.get_amount_tendered_or_credited(), 150.2)
-  ledger.set_amount_tendered('$150.3012')
-  strictEqual(ledger.get_amount_tendered_or_credited(), 150.3012)
 })
  
 test("register-ledger-payment-updates-change", function() {
@@ -725,17 +790,17 @@ test("register-ui-row-change-updates-ledger-row", function() {
   lr = ui_lr.ledger_row
   ui_lr.credit.value = '100.55'
   fireEvent(ui_lr.credit, 'change')
-  equal(lr.get_credit(), 100.55)
+  equal(lr.get_credit(), 10055)
 
   ui_lr.credit.value = '-50'
   fireEvent(ui_lr.credit, 'change')
-  equal(lr.get_debit(), 50)
+  equal(lr.get_debit(), 5000)
   equal(ui_lr.debit.value, '50.00')
 
   ui_lr.debit.value = 'foo'
   fireEvent(ui_lr.debit, 'change')
   equal(ui_lr.last_alert, 'Please enter a number')
-  equal(lr.get_debit(), 50)
+  equal(lr.get_debit(), 5000)
   equal(ui_lr.debit.value, '50.00')
 })
 
@@ -885,6 +950,61 @@ test("register-ui-updating-purchase-row-updates-totals", function() {
   equal(ui.change.textContent, '$0.00')
 })
 
+test("register-ui-adding-purchase-row-ignores-dollar-sign", function() {
+  expect(6)
+  var ui = this.register.ui.initialize()
+  add_purchase(ui, '$10.33', '1')
+  equal(ui.total.textContent, '$10.33')
+  equal(ui.tendered.value, '$10.33')
+  ok(!ui.credited_row.visible())
+  equal(ui.credited.textContent, '$0.00')
+  equal(ui.change.textContent, '$0.00')
+})
+
+test("register-ui-updating-purchase-row-ignores-dollar-sign", function() {
+  expect(7)
+  var ui = this.register.ui.initialize()
+  add_purchase(ui, '100', '1')
+
+  var lr = ui.rows.first()
+  lr.credit.value = '$50'
+  ok(fireEvent(lr.credit, 'change'))
+  equal(ui.total.textContent, '$50.00')
+  equal(ui.tendered.value, '$50.00')
+  ok(!ui.credited_row.visible())
+  equal(ui.credited.textContent, '$0.00')
+  equal(ui.change.textContent, '$0.00')
+})
+
+test("register-ui-setting-amount-tendered-ignores-dollar-sign", function() {
+  expect(8)
+  var ui = this.register.ui.initialize()
+  add_purchase(ui, '18.99', '1')
+  equal(ui.total.textContent, '$18.99')
+
+  change_tendered(ui, '$20')
+  equal(ui.total.textContent, '$18.99')
+  equal(ui.tendered.value, '$20.00')
+  ok(!ui.credited_row.visible())
+  equal(ui.credited.textContent, '$0.00')
+  equal(ui.change.textContent, '$1.01')
+})
+
+test("register-ui-setting-amount-tendered-with-cents", function() {
+  expect(8)
+  var ui = this.register.ui.initialize()
+  add_purchase(ui, '18.99', '1')
+  equal(ui.total.textContent, '$18.99')
+
+  change_tendered(ui, '$20.01')
+  equal(ui.tendered.value, '$20.01')
+  equal(ui.change.textContent, '$1.02')
+
+  change_tendered(ui, '.01') 
+  equal(ui.tendered.value, '$0.01')
+  equal(ui.change.textContent, '$-18.98')
+})
+
 test("register-ui-deleting-purchase-row-updates-totals", function() {
   expect(13)
   var ui = this.register.ui.initialize()
@@ -941,7 +1061,7 @@ test("register-ui-submit", function() {
   is_undefined(serialized)
 
   ui.last_alert = undefined 
-  add_purchase(ui, '100', '1')
+  add_purchase(ui, '100.99', '1')
   set_user_id(ui)
   submit(ui, 'record')
   equal(ui.errors.length, 0)
@@ -959,8 +1079,8 @@ test("register-ui-submit", function() {
     "payment[ledger_entries_attributes][0][account_name]": "Store Purchase",
     "payment[ledger_entries_attributes][0][detail]": undefined,
     "payment[ledger_entries_attributes][0][register_code]": "ST",
-    "payment[ledger_entries_attributes][0][debit]": undefined,
-    "payment[ledger_entries_attributes][0][credit]": 100,
+    "payment[ledger_entries_attributes][0][debit_in_cents]": undefined,
+    "payment[ledger_entries_attributes][0][credit_in_cents]": 10099,
     "payment[ledger_entries_attributes][0][code_label]": "Store Purchase",
     "payment[ledger_entries_attributes][0][code_type]": "purchase",
     "payment[ledger_entries_attributes][1][type]": "Asset",
@@ -968,8 +1088,8 @@ test("register-ui-submit", function() {
     "payment[ledger_entries_attributes][1][account_name]": "Cash",
     "payment[ledger_entries_attributes][1][detail]": undefined,
     "payment[ledger_entries_attributes][1][register_code]": "CA",
-    "payment[ledger_entries_attributes][1][debit]": 100,
-    "payment[ledger_entries_attributes][1][credit]": undefined,
+    "payment[ledger_entries_attributes][1][debit_in_cents]": 10099,
+    "payment[ledger_entries_attributes][1][credit_in_cents]": undefined,
     "payment[ledger_entries_attributes][1][code_label]": "Cash",
     "payment[ledger_entries_attributes][1][code_type]": "payment"
   })
@@ -988,8 +1108,8 @@ test("register-ui-submit", function() {
         "account_name": "Store Purchase",
         "detail": undefined,
         "register_code": "ST",
-        "debit": undefined,
-        "credit": 100,
+        "debit_in_cents": undefined,
+        "credit_in_cents": 10099,
         "code_label": "Store Purchase",
         "code_type": "purchase"
       },
@@ -999,8 +1119,8 @@ test("register-ui-submit", function() {
         "account_name": "Cash",
         "detail": undefined,
         "register_code": "CA",
-        "debit": 100,
-        "credit": undefined,
+        "debit_in_cents": 10099,
+        "credit_in_cents": undefined,
         "code_label": "Cash",
         "code_type": "payment"
       },
@@ -1022,8 +1142,32 @@ test("register-submit-with-fractional-amounts", function() {
   set_user_id(ui)
   submit(ui, 'record')
   equal(ui.errors.length, 0)
-  change_credit = serialized["payment[ledger_entries_attributes][2][credit]"]
-  equal(change_credit, 1.63)
+  change_credit = serialized["payment[ledger_entries_attributes][2][credit_in_cents]"]
+  equal(change_credit, 163)
+})
+
+test("register-purchase-floating-point-zero", function() {
+  expect(8)
+  var ui = this.register.ui.initialize()
+  var register = this.register
+  var serialized
+  register.on_submit = function(event, serialized_form) {
+    return serialized = serialized_form 
+  }
+
+  add_purchase(ui, '10', 1)
+  add_purchase(ui, '6.99', 1)
+  // this can raise an uncaught exception when 10 + 16.99 ends up as 16.990000000000002
+  // and the change becomes 0.000000000000008 which gets truncated to zero
+  // This should no longer happen, because LedgerRow stores amount as integer cents now.
+  set_user_id(ui)
+  submit(ui, 'record')
+  var s = register.serialize()
+  var credits = s.ledger_entries_attributes.sum('credit_in_cents')
+  var debits = s.ledger_entries_attributes.sum('debit_in_cents')
+  equal(credits, 1699)
+  equal(debits, 1699)
+  equal(credits, debits)
 })
 
 test("register-ui-set-payment-code", function() {
