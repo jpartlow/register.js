@@ -1,7 +1,7 @@
 /* This file is part of register.js.  Copyright 2011 Joshua Partlow.  This program is free software, licensed under the terms of the GNU General Public License.  Please see the LICENSE file in this distribution for more information, or see http://www.gnu.org/copyleft/gpl.html. */
 
 var Register = {
-  version: '0.1.7',
+  version: '0.1.8',
   debug: false,
   registers: $H(),
 
@@ -27,6 +27,15 @@ var Register = {
   update: function(id, changes) {
     var register = this.registers.get(id)
     register.set_errors(changes)
+  },
+
+  // Lookup the given register by id and turn off the submitting flag,
+  // so that the user can update and submit again.
+  // Also hide the spinner.
+  submission_finished: function(register_id) {
+    var register = this.registers.get(register_id)
+    register.submitting = false
+    this.hide_spinner()
   },
 
   // Make an Ajax request for register configuration.
@@ -68,10 +77,21 @@ var Register = {
   },
 
   // Override with a local function to show a work in progress graphic.
-  show_spinner: null,
+  __show_spinner: null,
 
   // Override with a local function to hide a work in progress graphic.
-  hide_spinner: null,
+  __hide_spinner: null,
+
+  // Show work in progress spinner if present.
+  show_spinner: function() {
+    if (typeof Register.__show_spinner == 'function') { Register.__show_spinner() }
+  },
+
+  // Hide work in progress spinner if present.
+  hide_spinner: function() {
+    if (typeof Register.__hide_spinner == 'function') { Register.__hide_spinner() }
+  },
+
 }
 
 /////////////////////
@@ -449,14 +469,6 @@ Object.extend(Register.Instance.prototype, {
   // Register a callback method for a Register event.
   add_listener: function(event, callback) {
     this.ledger.add_listener(event, callback) 
-  },
-
-  // Lookup the given register by id and turn off the submitting flag.
-  // Also hide the spinner.
-  submission_finished: function(register_id) {
-    var register = this.registers.get(id)
-    register.submitting = false
-    this.hide_spinner()
   },
 
   // Override to hook into the Register's cancel cycle.
