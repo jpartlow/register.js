@@ -1,7 +1,7 @@
 /* This file is part of register.js.  Copyright 2011 Joshua Partlow.  This program is free software, licensed under the terms of the GNU General Public License.  Please see the LICENSE file in this distribution for more information, or see http://www.gnu.org/copyleft/gpl.html. */
 
 var Register = {
-  version: '0.1.6',
+  version: '0.1.7',
   debug: false,
   registers: $H(),
 
@@ -451,6 +451,14 @@ Object.extend(Register.Instance.prototype, {
     this.ledger.add_listener(event, callback) 
   },
 
+  // Lookup the given register by id and turn off the submitting flag.
+  // Also hide the spinner.
+  submission_finished: function(register_id) {
+    var register = this.registers.get(id)
+    register.submitting = false
+    this.hide_spinner()
+  },
+
   // Override to hook into the Register's cancel cycle.
   on_cancel: function(event) { return true },
 
@@ -474,6 +482,11 @@ Object.extend(Register.Instance.prototype, {
   on_submit: function(event, parameters) { return true },
 
   submit: function(event) {
+    if (this.submitting) {
+      event.stop()
+      return false
+    }
+    this.submitting = true
     var success = false
     var parameters = this.parameterize()
     var id = this.id()
@@ -488,7 +501,7 @@ Object.extend(Register.Instance.prototype, {
           // invalid payment data
           on422: function(response) {
             Register.update(id, response.responseJSON)
-            Register.hide_spinner()
+            Register.submission_finished(id)
           },
           // if successful redirect
           onSuccess: function(response) {
@@ -503,15 +516,16 @@ Object.extend(Register.Instance.prototype, {
             } else {
               alert("Server failure: " + response.status + ":" + response.statusText + "\n\n" + response.responseText)
             }
-            Register.hide_spinner()
+            Register.submission_finished(id)
           },
           onException: function(request, exception) {
             alert("Failed to submit register.  Threw: " + exception)
-            Register.hide_spinner()
+            Register.submission_finished(id)
           },
         })
       } else {
         this.hide_spinner()
+        this.submitting = false
       }
       success = true 
     }
