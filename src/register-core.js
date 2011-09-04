@@ -1,7 +1,7 @@
 /* This file is part of register.js.  Copyright 2011 Joshua Partlow.  This program is free software, licensed under the terms of the GNU General Public License.  Please see the LICENSE file in this distribution for more information, or see http://www.gnu.org/copyleft/gpl.html. */
 
 var Register = {
-  version: '0.1.9',
+  version: '0.1.10',
   debug: false,
   registers: $H(),
 
@@ -524,7 +524,12 @@ Object.extend(Register.Instance.prototype, {
     this.show_spinner()
     if (this.on_submit(event, parameters)) {
       var href = this.ui.form.target || '#'
-      var method = this.ui.form.method || 'post'
+      var _method = this.ui.form.getInputs('hidden','_method').first()
+      var method
+      if (typeof(_method) != 'undefined') {
+        method = _method.value
+      }
+      method = method || this.ui.form.method || 'post'
       if (!href.match(/^#/)) {
         new Ajax.Request(href, {
           method: method,
