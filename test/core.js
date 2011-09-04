@@ -1305,3 +1305,24 @@ test("register-ui-credit-card-swipe-handler-disabled-for-partial-refund", functi
   var ui = register.ui.initialize()
   equal(ran, 'no')
 })
+
+module("register-module", {
+  setup: function() {
+    this.gold = new GoldData()
+    this.config = this.gold.new_payment_register_config()
+    this.edit_config = this.gold.edit_payment_register_config()
+    this.edit_config["payment"] = $H(this.gold.payment).clone().toObject()
+    this.edit_config["payment"]["id"] = 1
+    this.register1 = Register.create(this.config)
+    this.register2 = Register.create(this.edit_config)
+  },
+})
+
+test("register-any-incomplete", function() {
+  expect(3)
+  ok(Register.any_incomplete())
+  this.register1.canceled = true
+  ok(Register.any_incomplete())
+  Register.register_completed(this.register2.id())
+  ok(!Register.any_incomplete())
+})

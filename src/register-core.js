@@ -1,7 +1,7 @@
 /* This file is part of register.js.  Copyright 2011 Joshua Partlow.  This program is free software, licensed under the terms of the GNU General Public License.  Please see the LICENSE file in this distribution for more information, or see http://www.gnu.org/copyleft/gpl.html. */
 
 var Register = {
-  version: '0.1.8',
+  version: '0.1.9',
   debug: false,
   registers: $H(),
 
@@ -36,6 +36,22 @@ var Register = {
     var register = this.registers.get(register_id)
     register.submitting = false
     this.hide_spinner()
+  },
+
+  // Lookup the given register by id and set the submitted flag, so
+  // that we know that the register has completed successfully and
+  // no longer represents unsaved state.
+  register_completed: function(register_id) {
+    var register = this.registers.get(register_id)
+    register.submitted = true
+  },
+
+  // Returns true if there are any registers which have not been
+  // canceled or sucessfully completed (and thus have unsaved state.
+  any_incomplete: function() {
+    return this.registers.values().any(function(r) {
+      return !r.canceled && !r.submitted
+    })
   },
 
   // Make an Ajax request for register configuration.
@@ -483,6 +499,8 @@ Object.extend(Register.Instance.prototype, {
         event.stop()
         Register.destroy(this)
         this.hide_spinner()
+      } else {
+        this.canceled = true
       }
       // otherwise let the page reload
       success = true
@@ -490,6 +508,7 @@ Object.extend(Register.Instance.prototype, {
     return success 
   },
 
+  // Sets a canceled class flag in the register ui div
   // Override to hook into the Register's submit cycle,
   on_submit: function(event, parameters) { return true },
 
@@ -517,6 +536,7 @@ Object.extend(Register.Instance.prototype, {
           },
           // if successful redirect
           onSuccess: function(response) {
+            Register.register_completed(id)
             window.location = response.responseJSON.location
           },
           // general server failure
