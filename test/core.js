@@ -115,12 +115,12 @@ test("gold-data", function() {
   expect(4)
   gd = new GoldData()
   var pc = gd.purchase_codes
-  equal(pc.length, 2)
-  pc.push(3)
-  equal(gd.purchase_codes.length, 3)
-  gd = new GoldData()
-  equal(gd.purchase_codes.length, 2)
   equal(pc.length, 3)
+  pc.push(3)
+  equal(gd.purchase_codes.length, 4)
+  gd = new GoldData()
+  equal(gd.purchase_codes.length, 3)
+  equal(pc.length, 4)
 })
 
 module("register-util")
@@ -196,7 +196,7 @@ module("register-code", {
   }
 })
 test("init-code", function() {
-  var code_data = this.gold.purchase_codes[0]
+  var code_data = this.gold.purchase_codes[2]
   var code = new Register.Code(code_data)
   strictEqual(code.id, code_data.id)
   strictEqual(code.label, code_data.label)
@@ -208,6 +208,7 @@ test("init-code", function() {
   strictEqual(code.debit_or_credit, code_data.debit_or_credit)
   strictEqual(code.payment_type, code_data.payment_type)
   strictEqual(code.allow_cash, code_data.allow_cash)
+  strictEqual(code.require_detail, code_data.require_detail)
 })
 
 test("register-code-subtypes", function() {
@@ -304,6 +305,18 @@ test("register-ledger-row-initialize", function() {
   equal(lr.account_name, pc.account_name)
   equal(lr.register_code, pc.code)
   equal(lr.code_type, 'purchase')
+})
+
+test("register-ledger-row-initialize-require-detail", function() {
+  expect(2)
+  var pc = this.gold.purchase_codes[2]
+  ok(pc.require_detail)
+  var lr = new Register.LedgerRow({
+    code_type: 'purchase',
+    code: pc,
+    credit: '100',
+  })
+  ok(lr.require_detail)
 })
 
 test("register-ledger-row-bad-initialization", function() {
@@ -644,13 +657,14 @@ test("register-ui-delegation", function() {
 })
 
 test("register-ui-make-options", function() {
-  expect(31)
+  expect(40)
   var ui = this.register.ui.initialize()
   var pc = this.gold.purchase_codes
   var cr = this.gold.credit_codes
   var ex =  [ 
     new Element('option', { value: pc[0].id }).update(pc[0].label),
     new Element('option', { value: pc[1].id }).update(pc[1].label),
+    new Element('option', { value: pc[2].id }).update(pc[2].label),
   ]
   var options = ui.make_options(ui.purchase_codes, 'id', 'label')
   equal_elements(options, ex)
@@ -661,6 +675,7 @@ test("register-ui-make-options", function() {
   ex =  [ 
     new Element('option', { value: pc[0].id }).update(pc[0].code + ' (' + pc[0].label + ')'),
     new Element('option', { value: pc[1].id }).update(pc[1].code + ' (' + pc[1].label + ')'),
+    new Element('option', { value: pc[2].id }).update(pc[2].code + ' (' + pc[2].label + ')'),
   ]
   options = ui.make_options(ui.purchase_codes, 'id', function(o) { return o.code + ' (' + o.label + ')' })
   equal_elements(options, ex)
@@ -671,6 +686,8 @@ test("register-ui-make-options", function() {
       new Element('option', { value: pc[0].id }).update(pc[0].label)
     ).insert(
       new Element('option', { value: pc[1].id }).update(pc[1].label)
+    ).insert(
+      new Element('option', { value: pc[2].id }).update(pc[2].label)
     ),
     new Element('optgroup', { label: 'Credits' }).insert(
       new Element('option', { value: cr[0].id }).update(cr[0].label)
@@ -816,6 +833,19 @@ test("register-ui-row-set-to-zero-destroys", function() {
   fireEvent(ui_lr.credit, 'change')
   equal(ledger.count(), ledger_row_count - 2, "clears purchase and payment row")
   equal(ui.rows.length, ui_row_count - 1)
+})
+
+test("register-ui-row-validate", function() {
+  expect(5)
+  var ui = this.register.ui.initialize()
+  var pc = this.gold.purchase_codes[2]
+  ok(pc.require_detail)
+  ui_lr = ui.add_ledger_row(pc.id, '100')
+  ok(!ui_lr.validate())
+  matches(ui_lr.errors.first(), /Detail is required/)
+  ui_lr.set_detail('Foo')
+  ok(ui_lr.validate())
+  ok(ui_lr.errors.length == 0)
 })
 
 test("register-ui-sets-title", function() {
@@ -1126,6 +1156,20 @@ test("register-ui-submit", function() {
       },
     ],
   })
+})
+
+test("register-ui-validate-detail", function() {
+  expect(5)
+  var ui = this.register.ui.initialize()
+  var pc = this.gold.purchase_codes[2]
+  ok(pc.require_detail)
+  add_purchase(ui, '100', pc.id)
+  ui.validate()
+  ok(ui.errors.length > 1)
+  ok(ui.errors.join().match(/Detail is required/), 'Should have an error message for missing detail')
+  ui.rows.first().set_detail('Foo')
+  ui.validate()
+  ok(!ui.errors.join().match(/Detail is required/), 'Should not have any detail missing messages')
 })
 
 test("register-submit-with-fractional-amounts", function() {

@@ -632,7 +632,7 @@ Object.extend(Register.Code.prototype, {
     var configure = function(field) {
       this[field] = this.config[field]
     }.bind(this)
-    $A(['id', 'code', 'label', 'account_number', 'account_name', 'fee_types', 'account_type', 'debit_or_credit','payment_type', 'allows_change']).each(configure)
+    $A(['id', 'code', 'label', 'account_number', 'account_name', 'fee_types', 'account_type', 'debit_or_credit','payment_type', 'require_detail', 'allows_change']).each(configure)
     return this
   },
 

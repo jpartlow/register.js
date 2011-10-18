@@ -373,12 +373,14 @@ Object.extend(Register.Ledger.prototype, {
         this.errors.push('amount credited must be positive for a credit')
       }
     }
+
     if (debits != credits) {
       this.errors.push('debits and credits do not balance (debits must equal credits)')
     }
     if ((!this.payment_code.is_check() && this.purchase_rows().length == 0) || (this.purchase_rows('old').length > 0 && this.purchase_rows('new').length == 0)) {
       this.errors.push('no purchase codes have been entered')
     }
+    this.errors = this.errors.uniq()
     return this.errors.length == 0
   },
 
@@ -472,6 +474,7 @@ Object.extend(Register.LedgerRow.prototype, {
       ['code_label', 'label'],
       'detail',
       'code_type',
+      'require_detail',
     ]).each(set_default)
 
     if (!Register.LedgerRow.TYPES.include(this.code_type)) {

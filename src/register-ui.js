@@ -356,6 +356,13 @@ Object.extend(Register.UI.prototype, {
       valid = false
       this.errors.push('required fields have not been entered: ' + required.map(function(e) { return e.id.replace(/payment_/,'') }))
     }
+    this.rows.each(function(row) {
+      if (!row.validate()) {
+        valid = false
+        this.errors.push(row.errors)
+      }
+    }, this)
+    this.errors = this.errors.flatten().uniq()
     return valid
   },
 
@@ -695,6 +702,22 @@ Object.extend(Register.UI.Row.prototype, {
     value = value || ''
     this[name].value = monetize_value ? this.monetize_from_cents(value) : value
     return this
+  },
+
+  set_detail: function(value) {
+    return this.detail.value = value
+  },
+
+  // Validate the row.  Currently tests whether detail field is required.
+  // Returns true or false depending on whether the row has validation errors and
+  // sets an array this.errors with error messages.
+  validate: function() {
+    this.errors = $A([])
+    // Check for required detail input.
+    if (this.ledger_row.require_detail && !this.detail.present()) {
+      this.errors.push("Detail is required for a row entry of type '" + this.ledger_row.code_label + "'.")
+    }
+    return this.errors.length == 0
   },
 
   // Returns an Array of the row's form controls.

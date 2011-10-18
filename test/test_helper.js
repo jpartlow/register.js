@@ -181,6 +181,17 @@ function GoldData() {
       debit_or_credit: "C",
       allow_detail: true,
     },
+    {
+      id: 3,
+      code: "OT",
+      label: "Other",
+      account_number: "4300.000",
+      account_name: "Other",
+      fee_types: ["other"],
+      account_type: "Income",
+      debit_or_credit: "C",
+      require_detail: true,
+    },
   ]
 
   this.payment_codes = [
