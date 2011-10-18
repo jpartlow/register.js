@@ -179,7 +179,7 @@ Object.extend(Register.UI.prototype, {
 
   // Returns an Array of the enabled submission controls.
   get_submission_controls: function(all) {
-    return this.submission_controls.select('input').findAll(function(e) {
+    return this.submission_controls.select('input','button').findAll(function(e) {
       return all ? true : !e.disabled
     })
   },

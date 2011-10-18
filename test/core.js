@@ -1097,7 +1097,7 @@ test("register-ui-submit", function() {
   equal(ui.errors.length, 0)
   is_undefined(ui.last_alert)
   deepEqual(serialized, {
-    "commit": "Record",
+    "commit": "record",
     "payment[type]": "Cash",
     "payment[date(1i)]": "2011",
     "payment[date(2i)]": "3",
@@ -1124,7 +1124,7 @@ test("register-ui-submit", function() {
     "payment[ledger_entries_attributes][1][code_type]": "payment"
   })
   deepEqual(register.serialize(), {
-    "commit": "Record",
+    "commit": "record",
     "payment[type]": "Cash",
     "payment[date(1i)]": "2011",
     "payment[date(2i)]": "3",
