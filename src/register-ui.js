@@ -184,6 +184,14 @@ Object.extend(Register.UI.prototype, {
     })
   },
 
+  // Returns the first enabled submission control of class 'default', or the first
+  // enabled submission control if there is none with class 'default'.
+  get_default_submission_control: function() {
+    var submission_controls = this.get_submission_controls()
+    return submission_controls.detect(function(c) { return c.hasClassName('default') }) || 
+      submission_controls.first()
+  },
+
   // Find an enabled submission control by field.id.  (Will prefix
   // 'payment_submit_' if id does not include it.)
   find_submission_control: function(id) {
@@ -465,12 +473,12 @@ Object.extend(Register.UI.prototype, {
       this.alert_user(message)
     } else {
       // double-check authorization or record calls for credit cards.
-      if (this.successful_submitter.value == 'Authorize') {
+      if (this.successful_submitter == this.find_submission_control('authorize')) {
         if (!confirm("Authorizing will put a temporary hold in the amount of " + this.monetize_from_cents(this.ledger.get_amount_tendered_or_credited(), true) + " on the guest's credit card.  No funds will be transferred.  You may capture the funds later in a separate transaction.  Continue?")) {
           return false
         }
       }
-      if (this.successful_submitter.value == 'Record' && this.get_payment_code().is_credit_card()) {
+      if (this.successful_submitter == this.find_submission_control('record') && this.get_payment_code().is_credit_card()) {
         if (!confirm("Recording this credit card transaction will not capture any funds.  This should only be used to record a credit card transaction made through some other agency.  Continue?")) {
           return false
         }
@@ -564,7 +572,7 @@ Object.extend(Register.UI.prototype, {
       } else if (current_input == this.purchase_amount_input && current_input.present()) {
         this.purchase_codes_select.focus() 
       } else if (current_input == this.purchase_amount_input || this.get_payment_fields().include(current_input)) {
-        this.get_submission_controls().first().click()
+        this.get_default_submission_control().click()
       }
     }
   },
