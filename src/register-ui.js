@@ -78,7 +78,7 @@ Object.extend(Register.UI.prototype, {
           this.purchase_codes, 
           'id', 
           function(o) { return o.code + " (" + o.label.truncate(35) + ")" }, 
-          { value: Register.UI.PURCHASE_CODES_SELECT_BLANK_VALUE, label: '- Select a code -' }
+          { value: Register.UI.PURCHASE_CODES_SELECT_BLANK_VALUE, label: '- Select a purchase code -' }
         ),
         true
       )
