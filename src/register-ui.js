@@ -177,11 +177,12 @@ Object.extend(Register.UI.prototype, {
     return this.get_payment_fields(include_disabled).detect(function(f) { return f.id == id || f.id == 'payment_' + id })
   },
 
-  // Returns an Array of the enabled submission controls.
+  // Returns an Array of the enabled submission controls, or all submission controls if
+  // all is true.
   get_submission_controls: function(all) {
-    return this.submission_controls.select('input','button').findAll(function(e) {
-      return all ? true : !e.disabled
-    })
+    return this.form.getElements().reject(function(e) {
+      return !e.descendantOf(this.submission_controls) || (all ? false : e.disabled)
+    }, this)
   },
 
   // Returns the first enabled submission control of class 'default', or the first
@@ -580,12 +581,20 @@ Object.extend(Register.UI.prototype, {
   // Ensures that tabbing/shift-tabbing circles only within register controls.
   initialize_tabbing_controls: function() {
     // register submit catches tab and focuses on amount-input for a closed tabbing loop
-    this.get_submission_controls().last().observe('keypress', function(event) {
-      if (event.keyCode == Event.KEY_TAB && !event.shiftKey) {
-        event.stop()
-        this.purchase_amount_input.activate()
-      }
-    }.bind(this))
+    this.get_submission_controls(true).each(function(c) {
+      
+      c.observe('keypress', function(event) {
+        var element = event.findElement()
+        // Have to test if we are currently the last element, since it can vary depending
+        // on selected payment type.
+        if (element == this.get_submission_controls().last()) {
+          if (event.keyCode == Event.KEY_TAB && !event.shiftKey) {
+            event.stop()
+            this.purchase_amount_input.activate()
+          }
+        }
+      }.bind(this))
+    }, this)
     // register amount-input catches shift-tab and focuses back to payment submit
     this.purchase_amount_input.observe('keypress', function(event) {
       if (event.keyCode == Event.KEY_TAB && event.shiftKey) {
