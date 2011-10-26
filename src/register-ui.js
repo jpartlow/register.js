@@ -139,7 +139,7 @@ Object.extend(Register.UI.prototype, {
           ul.insert(new Element('li').update(err))
         })
         this.errors_div.insert(ul)
-        this.payment_fields.select('.fieldWithError').invoke('removeClassName', '.fieldWithError')
+        this.payment_fields.select('.fieldWithError').invoke('removeClassName', 'fieldWithError')
         $A(validation_errors.on).each(function(attr) {
           var field = this.find_payment_field(attr)
           if (field) { field.addClassName('fieldWithError') }
@@ -411,6 +411,7 @@ Object.extend(Register.UI.prototype, {
         this.credit_card_input.value = '%'
         this.credit_card_input_popup.show()
         this.credit_card_input.focus()
+        this.credit_card_input.selectionStart = 1
       }
     }
   },
