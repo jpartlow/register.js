@@ -180,9 +180,10 @@ Object.extend(Register.UI.prototype, {
   // Returns an Array of the enabled submission controls, or all submission controls if
   // all is true.
   get_submission_controls: function(all) {
-    return this.form.getElements().reject(function(e) {
-      return !e.descendantOf(this.submission_controls) || (all ? false : e.disabled)
-    }, this)
+    return this.submission_controls.select('*').reject(function(e) { 
+      is_a_submitter = $A(['input','button']).include(e.tagName.toLowerCase()) && e.type == 'submit'
+      return !is_a_submitter || (all ? false : e.disabled)
+    })
   },
 
   // Returns the first enabled submission control of class 'default', or the first
