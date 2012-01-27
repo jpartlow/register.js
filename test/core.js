@@ -276,6 +276,21 @@ test("register-change-code", function() {
   deepEqual(this.register.change_code(), new Register.PaymentCode(change_code))
 })
 
+test("register-switch-payment-code-to", function() {
+  expect(3)
+  this.register.ui.initialize()
+  var py_code = this.gold.payment_codes[1]
+  var pay_select = this.register.ui.payment_codes_select
+  ok(pay_select.value != py_code.id)
+  var changed = false
+  pay_select.observe('change', function() {
+    changed = true
+  })
+  this.register.switch_payment_code_to(py_code.payment_type)
+  equal(pay_select.getValue(), py_code.id.toString())
+  ok(changed, 'Fired payment code select onchange event.')
+})
+
 test("register-ledger-count", function() {
   expect(1)
   var ledger = this.register.ledger

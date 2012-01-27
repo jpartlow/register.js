@@ -1,7 +1,7 @@
 /* This file is part of register.js.  Copyright 2011 Joshua Partlow.  This program is free software, licensed under the terms of the GNU General Public License.  Please see the LICENSE file in this distribution for more information, or see http://www.gnu.org/copyleft/gpl.html. */
 
 var Register = {
-  version: '0.1.17',
+  version: '0.1.18',
   debug: false,
   registers: $H(),
 
@@ -90,6 +90,21 @@ var Register = {
   destroy: function(instance) {
     if (instance.root()) { instance.root().remove() }
     this.registers.unset(instance.id())
+  },
+
+  // Trigger a particular DOM event on the given element.
+  fire_event: function(element, event) {
+    if (document.createEventObject){
+      // dispatch for IE
+      var evt = document.createEventObject();
+      return element.fireEvent('on'+event,evt)
+    }
+    else{
+      // dispatch for firefox + others
+      var evt = document.createEvent("HTMLEvents");
+      evt.initEvent(event, true, true ); // event type, bubbling, cancelable
+      return element.dispatchEvent(evt);
+    }
   },
 
   // Override with a local function to show a work in progress graphic.
@@ -463,14 +478,16 @@ Object.extend(Register.Instance.prototype, {
     return this.ui.add_ledger_row((code ? code.id : code_or_code_id), amount)
   },
 
-  // Facade for changing the payment code.  Sets the UI payment_codes_select.
+  // Facade for changing the payment code.  Sets the UI payment_codes_select and fires its 
+  // change event.
   switch_payment_code_to: function(payment_type) {
     var payment_code = this.find_code_by('payment_type', payment_type)
     if (typeof payment_code == 'undefined') { 
       throw(new Register.Exception.RegisterException('switch_payment_code_to', 'No payment code found for payment_type: "#{payment_type}"', { payment_type: payment_type }))
     }
-    this.ui.payment_codes_select.value = payment_code.id
-    this.ui.handle_payment_code_select()
+    var pay_select = this.ui.payment_codes_select
+    pay_select.value = payment_code.id
+    Register.fire_event(pay_select, 'change')
   },
   
   // Return the cash payment code which should be associated with change.
