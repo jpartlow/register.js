@@ -348,7 +348,12 @@ Object.extend(Register.UI.prototype, {
   serialize: function() {
     var serialized = {}
     this.get_payment_fields().inject(serialized, function(object,field) {
-      object[field.name] = field.value
+      if ((field.type == 'radio' || field.type == 'checkbox') &&
+          !field.checked) {
+        // do not serialize 
+      } else {
+        object[field.name] = field.value
+      }
       return object
     })
     serialized['payment[type]'] = this.get_payment_type()

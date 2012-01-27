@@ -875,10 +875,10 @@ test("register-ui-sets-payment-fields", function() {
   expect(2)
   var py = this.gold.payment_codes[1]
   var ui = this.register.ui.initialize()
-  equal(ui.get_payment_fields().length, 6)
+  equal(ui.get_payment_fields().length, 10)
   ui.payment_codes_select.value = py.id
   ui.setup_payment_type_fields()
-  equal(ui.get_payment_fields().length, 7)
+  equal(ui.get_payment_fields().length, 11)
 })
 
 test("register-ui-payment-type-select-sets-fields", function() {
@@ -886,10 +886,10 @@ test("register-ui-payment-type-select-sets-fields", function() {
   var py = this.gold.payment_codes[1]
   var ui = this.register.ui.initialize()
   var py_select = ui.payment_codes_select
-  equal(ui.get_payment_fields().length, 6)
+  equal(ui.get_payment_fields().length, 10)
   py_select.value = py.id
   fireEvent(py_select, 'change')
-  equal(ui.get_payment_fields().length, 7)
+  equal(ui.get_payment_fields().length, 11)
 })
 
 test("register-ui-payment-type-select-sets-submission-controls", function() {
@@ -1073,6 +1073,36 @@ test("register-ui-credit-totals", function() {
   ok(!ui.tendered_row.visible())
   equal(ui.credited.textContent, '$50.00')
   equal(ui.change.textContent, '$0.00')
+})
+
+test("register-ui-serialize", function() {
+  expect(2)
+  var ui = this.register.ui.initialize()
+  ui.successful_submitter = ui.find_submission_control('record')
+  var serialized = ui.serialize()
+  deepEqual(serialized, {
+    "payment[type]": "Cash",
+    "payment[date(1i)]": "2011",
+    "payment[date(2i)]": "3",
+    "payment[date(3i)]": "29",
+    "payment[user_id]": "",
+    "payment[note]": "",
+    "commit": "record"
+  })
+  ui.find_payment_field('payment_test_checkbox').checked = true
+  ui.find_payment_field('payment_test_radio_2').checked = true
+  serialized = ui.serialize()
+  deepEqual(serialized, {
+    "payment[test_checkbox]": "on",
+    "payment[test_radio]": "2",
+    "payment[type]": "Cash",
+    "payment[date(1i)]": "2011",
+    "payment[date(2i)]": "3",
+    "payment[date(3i)]": "29",
+    "payment[user_id]": "",
+    "payment[note]": "",
+    "commit": "record"
+  })
 })
 
 test("register-ui-submit", function() {
